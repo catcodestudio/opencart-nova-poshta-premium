@@ -3,6 +3,7 @@
   <div class="page-header">
     <div class="container-fluid">
       <div class="float-end">
+        <button type="button" id="button-sync-cod" data-url="{{ sync_url }}" data-bs-toggle="tooltip" title="{{ button_sync_cod }}" class="btn btn-info"><i class="fa-solid fa-money-bill-transfer"></i></button>
         <a href="{{ back }}" data-bs-toggle="tooltip" title="{{ button_back }}" class="btn btn-light"><i class="fa-solid fa-reply"></i></a>
       </div>
       <h1>{{ heading_title }}</h1>
@@ -15,7 +16,7 @@
   </div>
   <div class="container-fluid">
     <div class="card">
-      <div class="card-header"><i class="fa-solid fa-truck"></i> {{ text_list }}</div>
+      <div class="card-header"><i class="fa-solid fa-truck"></i> {{ text_list }} <span id="sync-result" class="ms-3 small"></span></div>
       <div class="card-body">
         <table class="table table-bordered table-hover">
           <thead>
@@ -25,13 +26,15 @@
               <th>{{ column_recipient }}</th>
               <th>{{ column_ttn }}</th>
               <th>{{ column_status }}</th>
+              <th>{{ column_cod }}</th>
+              <th>{{ column_return }}</th>
               <th>{{ column_created }}</th>
-              <th>{{ column_last_polled }}</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {% for s in shipments %}
-              <tr>
+              <tr data-shipment-id="{{ s.shipment_id }}">
                 <td>{{ s.shipment_id }}</td>
                 <td><a href="{{ s.order_url }}">#{{ s.order_id }}</a></td>
                 <td>{{ s.recipient }}</td>
@@ -47,11 +50,34 @@
                     {{ s.status_code }} · {{ s.status_text }}
                   </span>
                 </td>
+                <td>
+                  {% if s.cod_amount > 0 %}
+                    <strong>{{ '%.2f'|format(s.cod_amount) }} ₴</strong><br/>
+                    {% if s.money_transfer %}
+                      <small class="text-success">→ {{ s.money_transfer }}</small>
+                    {% else %}
+                      <small class="text-muted">awaiting payout</small>
+                    {% endif %}
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if s.return_ttn %}
+                    <a href="https://novaposhta.ua/tracking/?cargo_number={{ s.return_ttn }}" target="_blank">{{ s.return_ttn }}</a>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
                 <td>{{ s.created_at }}</td>
-                <td>{{ s.last_polled_at }}</td>
+                <td>
+                  {% if s.int_doc_number and not s.return_ttn %}
+                    <button type="button" class="btn btn-sm btn-outline-warning button-return" data-url="{{ s.return_url }}" title="{{ button_return }}"><i class="fa-solid fa-rotate-left"></i></button>
+                  {% endif %}
+                </td>
               </tr>
             {% else %}
-              <tr><td colspan="7" class="text-center text-muted">{{ text_empty }}</td></tr>
+              <tr><td colspan="9" class="text-center text-muted">{{ text_empty }}</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -59,4 +85,37 @@
     </div>
   </div>
 </div>
+<script>
+(() => {
+  const post = (url) => fetch(url, {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, credentials:'same-origin'}).then(r => r.json());
+  const sync = document.getElementById('button-sync-cod');
+  if (sync) {
+    sync.addEventListener('click', () => {
+      const r = document.getElementById('sync-result');
+      r.textContent = '...';
+      r.className = 'ms-3 small text-muted';
+      post(sync.dataset.url).then(d => {
+        r.textContent = d.success || d.error;
+        r.className = 'ms-3 small ' + (d.success ? 'text-success' : 'text-danger');
+        if (d.success) setTimeout(() => location.reload(), 1500);
+      });
+    });
+  }
+  document.querySelectorAll('.button-return').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!confirm('Create return TTN for this shipment?')) return;
+      btn.disabled = true;
+      post(btn.dataset.url).then(d => {
+        if (d.success) {
+          alert(d.success);
+          location.reload();
+        } else {
+          alert(d.error || 'failed');
+          btn.disabled = false;
+        }
+      });
+    });
+  });
+})();
+</script>
 {{ footer }}

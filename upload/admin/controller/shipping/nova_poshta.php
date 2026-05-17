@@ -4,6 +4,7 @@ namespace Opencart\Admin\Controller\Extension\NovaPoshtaPremium\Shipping;
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/client.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/crypto.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/cache.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/license.php';
 
 class NovaPoshta extends \Opencart\System\Engine\Controller {
 	private function jsonResponse(array $data): void {
@@ -29,6 +30,8 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			`order_id` int NOT NULL,
 			`int_doc_number` varchar(32) DEFAULT NULL,
 			`int_doc_ref` varchar(64) DEFAULT NULL,
+			`return_int_doc_number` varchar(32) DEFAULT NULL,
+			`return_int_doc_ref` varchar(64) DEFAULT NULL,
 			`sender_city_ref` varchar(64) DEFAULT NULL,
 			`sender_warehouse_ref` varchar(64) DEFAULT NULL,
 			`recipient_city_ref` varchar(64) DEFAULT NULL,
@@ -159,12 +162,24 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		$this->model_setting_cron->addCron('nova_poshta_premium_license', 'Nova Poshta Premium — daily license check', 'day', 'extension/nova_poshta_premium/cron.licenseCheck', true);
 		try { $this->model_setting_cron->deleteCronByCode('nova_poshta_premium_sync_cities'); } catch (\Throwable $e) {}
 		$this->model_setting_cron->addCron('nova_poshta_premium_sync_cities', 'Nova Poshta Premium — weekly full city sync', 'week', 'extension/nova_poshta_premium/cron.syncCities', true);
+		try { $this->model_setting_cron->deleteCronByCode('nova_poshta_premium_sync_cod'); } catch (\Throwable $e) {}
+		$this->model_setting_cron->addCron('nova_poshta_premium_sync_cod', 'Nova Poshta Premium — daily COD payout sync', 'day', 'extension/nova_poshta_premium/cron.syncCod', true);
 
-		// Grant access+modify on our admin routes to the Top Administrator user group (id=1).
+		// Idempotent schema upgrade: add return columns on existing installs.
+		try {
+			$this->db->query("ALTER TABLE `{$prefix}np_shipment` ADD COLUMN `return_int_doc_number` varchar(32) DEFAULT NULL AFTER `int_doc_ref`");
+		} catch (\Throwable $e) {}
+		try {
+			$this->db->query("ALTER TABLE `{$prefix}np_shipment` ADD COLUMN `return_int_doc_ref` varchar(64) DEFAULT NULL AFTER `return_int_doc_number`");
+		} catch (\Throwable $e) {}
+
+		// Grant access+modify on our admin routes to the current user group.
 		$this->load->model('user/user_group');
 		foreach (['extension/nova_poshta_premium/shipping/nova_poshta', 'extension/nova_poshta_premium/shipment'] as $route) {
-			$this->model_user_user_group->addPermission((int)$this->user->getGroupId(), 'access', $route);
-			$this->model_user_user_group->addPermission((int)$this->user->getGroupId(), 'modify', $route);
+			try {
+				$this->model_user_user_group->addPermission((int)$this->user->getGroupId(), 'access', $route);
+				$this->model_user_user_group->addPermission((int)$this->user->getGroupId(), 'modify', $route);
+			} catch (\Throwable $e) {}
 		}
 	}
 
@@ -174,7 +189,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			try { $this->model_setting_event->deleteEventByCode($code); } catch (\Throwable $e) {}
 		}
 		$this->load->model('setting/cron');
-		foreach (['nova_poshta_premium_poll', 'nova_poshta_premium_webhook', 'nova_poshta_premium_license', 'nova_poshta_premium_sync_cities'] as $code) {
+		foreach (['nova_poshta_premium_poll', 'nova_poshta_premium_webhook', 'nova_poshta_premium_license', 'nova_poshta_premium_sync_cities', 'nova_poshta_premium_sync_cod'] as $code) {
 			try { $this->model_setting_cron->deleteCronByCode($code); } catch (\Throwable $e) {}
 		}
 		// Tables intentionally preserved on uninstall to avoid losing shipment history.
@@ -238,7 +253,8 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		$data['shipping_nova_poshta_sender_phone']             = (string)$this->config->get('shipping_nova_poshta_sender_phone');
 		$data['shipping_nova_poshta_auto_ttn_status_id']   = (int)$this->config->get('shipping_nova_poshta_auto_ttn_status_id');
 		$data['shipping_nova_poshta_license_key']          = (string)$this->config->get('shipping_nova_poshta_license_key');
-		$data['shipping_nova_poshta_license_status']       = (string)$this->config->get('shipping_nova_poshta_license_status');
+		$data['shipping_nova_poshta_license_status']       = \Opencart\System\Library\NovaPoshta\License::describe($this->config);
+		$data['shipping_nova_poshta_license_is_pro']       = \Opencart\System\Library\NovaPoshta\License::isPro($this->config);
 
 		$this->load->model('localisation/tax_class');
 		$data['tax_classes'] = $this->model_localisation_tax_class->getTaxClasses();

@@ -114,6 +114,9 @@ class Events extends \Opencart\System\Engine\Controller {
 		if ($weight <= 0) $weight = 0.5;
 		if ($cost   <= 0) $cost   = (float)($order['total'] ?? 100);
 
+		// COD: if order pays cash on delivery, mirror it as BackwardDelivery.
+		// Heuristic: payment_code == 'cod' triggers it. Merchants without COD use NonCash payments.
+		$codAmount = ((string)($order['payment_code'] ?? '') === 'cod') ? $cost : 0.0;
 		$client = new \Opencart\System\Library\NovaPoshta\Client($key);
 		$resp = $client->createTTN([
 			'sender_ref'             => $senderRef,
@@ -127,6 +130,7 @@ class Events extends \Opencart\System\Engine\Controller {
 			'recipient_phone'        => (string)($order['telephone'] ?? ''),
 			'weight'                 => $weight,
 			'cost'                   => $cost,
+			'cod_amount'             => $codAmount,
 			'description'            => mb_substr(implode(', ', $descParts) ?: 'Order #' . $order_id, 0, 200),
 			'service_type'           => 'WarehouseWarehouse',
 			'payer_type'             => 'Recipient',
@@ -138,7 +142,7 @@ class Events extends \Opencart\System\Engine\Controller {
 		if (!empty($resp['success']) && !empty($resp['data'][0]['IntDocNumber'])) {
 			$intDoc = (string)$resp['data'][0]['IntDocNumber'];
 			$intRef = (string)($resp['data'][0]['Ref'] ?? '');
-			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET int_doc_number = '" . $this->db->escape($intDoc) . "', int_doc_ref = '" . $this->db->escape($intRef) . "', status_code = 1, status_text = 'Created', weight = " . (float)$weight . ", declared_cost = " . (float)$cost . ", recipient_phone = '" . $this->db->escape((string)$order['telephone']) . "', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
+			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET int_doc_number = '" . $this->db->escape($intDoc) . "', int_doc_ref = '" . $this->db->escape($intRef) . "', status_code = 1, status_text = 'Created', weight = " . (float)$weight . ", declared_cost = " . (float)$cost . ", cod_amount = " . (float)$codAmount . ", recipient_phone = '" . $this->db->escape((string)$order['telephone']) . "', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
 		} else {
 			$err = is_array($resp['errors'] ?? null) ? implode('; ', $resp['errors']) : 'unknown error';
 			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET status_text = '" . $this->db->escape(mb_substr('TTN error: ' . $err, 0, 250)) . "', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);

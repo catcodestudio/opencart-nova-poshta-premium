@@ -96,4 +96,24 @@ class Cron extends \Opencart\System\Engine\Controller {
 		$key = \Opencart\System\Library\NovaPoshta\Crypto::decrypt((string)$this->config->get('shipping_nova_poshta_api_key'));
 		\Opencart\System\Library\NovaPoshta\Cache::syncCities($this->db, $key);
 	}
+
+	public function syncCod(): void {
+		$key = \Opencart\System\Library\NovaPoshta\Crypto::decrypt((string)$this->config->get('shipping_nova_poshta_api_key'));
+		if ($key === '') return;
+		$client = new \Opencart\System\Library\NovaPoshta\Client($key);
+		$dateFrom = date('d.m.Y', strtotime('-90 days'));
+		$dateTo   = date('d.m.Y');
+		for ($page = 1; $page <= 10; $page++) {
+			$resp = $client->getOwnShipments($dateFrom, $dateTo, $page);
+			if (empty($resp['success']) || empty($resp['data'])) break;
+			foreach ($resp['data'] as $row) {
+				$num = (string)($row['IntDocNumber'] ?? '');
+				$bds = (float)($row['BackwardDeliverySum'] ?? 0);
+				$mtn = (string)($row['MoneyTransferNumber'] ?? '');
+				if ($num === '') continue;
+				$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET cod_amount = " . $bds . ", money_transfer_number = '" . $this->db->escape($mtn) . "' WHERE int_doc_number = '" . $this->db->escape($num) . "'");
+			}
+			if (count($resp['data']) < 100) break;
+		}
+	}
 }

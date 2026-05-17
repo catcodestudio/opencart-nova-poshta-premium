@@ -1,6 +1,8 @@
 <?php
 namespace Opencart\System\Library\NovaPoshta;
 
+require_once __DIR__ . '/translit.php';
+
 class Client {
 	private string $endpoint = 'https://api.novaposhta.ua/v2.0/json/';
 	private string $apiKey;
@@ -94,14 +96,14 @@ class Client {
 		// Two-step flow: first create a PrivatePerson recipient counterparty
 		// (returns the global "Приватна особа" ref + new ContactPerson ref), then
 		// call InternetDocument.save with the resolved refs.
-		$names = preg_split('/\s+/', trim($args['recipient_name'] ?? '')) ?: [];
+		$rawName = trim($args['recipient_name'] ?? '');
+		// NP rejects Latin in names — transliterate before sending.
+		$rawName = Translit::toCyrillic($rawName);
+		$names = preg_split('/\s+/', $rawName) ?: [];
 		$firstName  = (string)($names[0] ?? '');
 		$lastName   = (string)($names[1] ?? $firstName);
 		$middleName = (string)($names[2] ?? '');
-		$phone      = preg_replace('/\D+/', '', (string)$args['recipient_phone']);
-		if (strlen($phone) === 10 && $phone[0] === '0') {
-			$phone = '38' . $phone;
-		}
+		$phone      = Translit::normalizePhone((string)$args['recipient_phone']);
 
 		$cpResp = $this->call('Counterparty', 'save', [
 			'FirstName'            => $firstName ?: 'Recipient',
@@ -120,7 +122,7 @@ class Client {
 			return ['success' => false, 'errors' => ['ContactPerson missing from Counterparty.save response']];
 		}
 
-		return $this->call('InternetDocument', 'save', [
+		$payload = [
 			'PayerType'      => $args['payer_type']     ?? 'Recipient',
 			'PaymentMethod'  => $args['payment_method'] ?? 'Cash',
 			'DateTime'       => date('d.m.Y'),
@@ -140,6 +142,42 @@ class Client {
 			'RecipientAddress' => $args['recipient_warehouse_ref'],
 			'ContactRecipient' => $contactRef,
 			'RecipientsPhone' => $phone,
+		];
+		// COD: if cod_amount provided, attach BackwardDelivery for cash-on-delivery.
+		if (!empty($args['cod_amount']) && (float)$args['cod_amount'] > 0) {
+			$payload['BackwardDeliveryData'] = [[
+				'PayerType'        => 'Recipient',
+				'CargoType'        => 'Money',
+				'RedeliveryString' => (string)max((int)round((float)$args['cod_amount']), 1),
+			]];
+		}
+		return $this->call('InternetDocument', 'save', $payload);
+	}
+
+	/**
+	 * Create a return TTN against an existing shipment. Uses the standard
+	 * "refusal of delivery" reason — sender becomes the recipient of the return.
+	 */
+	public function createReturn(string $intDocNumber, string $newWarehouseRef, string $reasonRef = '49754eb2-a9e1-11e3-9fa0-0050568002cf'): array {
+		return $this->call('AdditionalServiceGeneral', 'save', [
+			'IntDocNumber'    => $intDocNumber,
+			'PaymentMethod'   => 'Cash',
+			'Reason'          => $reasonRef,
+			'OrderType'       => 'orderCargoReturn',
+			'ReturnAddressRef'=> $newWarehouseRef,
+		]);
+	}
+
+	/**
+	 * Fetch our own shipments list for COD reconciliation. Returns rows with
+	 * BackwardDeliverySum / MoneyTransferNumber when payouts are issued.
+	 */
+	public function getOwnShipments(string $dateFrom, string $dateTo, int $page = 1): array {
+		return $this->call('InternetDocument', 'getDocumentList', [
+			'DateTimeFrom' => $dateFrom,
+			'DateTimeTo'   => $dateTo,
+			'GetFullList'  => '1',
+			'Page'         => (string)$page,
 		]);
 	}
 }
