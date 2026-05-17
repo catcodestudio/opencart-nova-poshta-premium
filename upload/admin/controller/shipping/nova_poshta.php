@@ -2,6 +2,7 @@
 namespace Opencart\Admin\Controller\Extension\NovaPoshtaPremium\Shipping;
 
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/client.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/crypto.php';
 
 class NovaPoshta extends \Opencart\System\Engine\Controller {
 	private function jsonResponse(array $data): void {
@@ -14,50 +15,208 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		$this->response->setOutput(json_encode($data));
 	}
 
+	private function apiKey(): string {
+		$raw = (string)$this->config->get('shipping_nova_poshta_api_key');
+		return $raw === '' ? '' : \Opencart\System\Library\NovaPoshta\Crypto::decrypt($raw);
+	}
+
+	public function install(): void {
+		$prefix = DB_PREFIX;
+
+		$this->db->query("CREATE TABLE IF NOT EXISTS `{$prefix}np_shipment` (
+			`shipment_id` int NOT NULL AUTO_INCREMENT,
+			`order_id` int NOT NULL,
+			`int_doc_number` varchar(32) DEFAULT NULL,
+			`int_doc_ref` varchar(64) DEFAULT NULL,
+			`sender_city_ref` varchar(64) DEFAULT NULL,
+			`sender_warehouse_ref` varchar(64) DEFAULT NULL,
+			`recipient_city_ref` varchar(64) DEFAULT NULL,
+			`recipient_warehouse_ref` varchar(64) DEFAULT NULL,
+			`recipient_phone` varchar(32) DEFAULT NULL,
+			`recipient_name` varchar(255) DEFAULT NULL,
+			`service_type` varchar(32) DEFAULT NULL,
+			`weight` decimal(10,3) DEFAULT NULL,
+			`declared_cost` decimal(15,2) DEFAULT NULL,
+			`cod_amount` decimal(15,2) DEFAULT NULL,
+			`status_code` int DEFAULT '0',
+			`status_text` varchar(255) DEFAULT NULL,
+			`money_transfer_number` varchar(64) DEFAULT NULL,
+			`created_at` datetime DEFAULT NULL,
+			`last_polled_at` datetime DEFAULT NULL,
+			PRIMARY KEY (`shipment_id`),
+			KEY `order_id` (`order_id`),
+			KEY `int_doc_number` (`int_doc_number`),
+			KEY `status_code` (`status_code`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+		$this->db->query("CREATE TABLE IF NOT EXISTS `{$prefix}np_shipment_history` (
+			`history_id` int NOT NULL AUTO_INCREMENT,
+			`shipment_id` int NOT NULL,
+			`status_code` int DEFAULT '0',
+			`status_text` varchar(255) DEFAULT NULL,
+			`changed_at` datetime DEFAULT NULL,
+			PRIMARY KEY (`history_id`),
+			KEY `shipment_id` (`shipment_id`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+		$this->db->query("CREATE TABLE IF NOT EXISTS `{$prefix}np_webhook_endpoint` (
+			`endpoint_id` int NOT NULL AUTO_INCREMENT,
+			`url` varchar(512) NOT NULL,
+			`secret` varchar(128) DEFAULT NULL,
+			`events` varchar(255) DEFAULT 'status.changed',
+			`status` tinyint(1) DEFAULT '1',
+			PRIMARY KEY (`endpoint_id`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+		$this->db->query("CREATE TABLE IF NOT EXISTS `{$prefix}np_webhook_delivery` (
+			`delivery_id` int NOT NULL AUTO_INCREMENT,
+			`endpoint_id` int NOT NULL,
+			`shipment_id` int DEFAULT NULL,
+			`event` varchar(64) DEFAULT NULL,
+			`payload` longtext,
+			`response_code` int DEFAULT NULL,
+			`response_body` text,
+			`attempt` int DEFAULT '1',
+			`status` enum('queued','sent','failed') DEFAULT 'queued',
+			`next_retry_at` datetime DEFAULT NULL,
+			`created_at` datetime DEFAULT NULL,
+			PRIMARY KEY (`delivery_id`),
+			KEY `endpoint_id` (`endpoint_id`),
+			KEY `status_next` (`status`,`next_retry_at`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+		$this->db->query("CREATE TABLE IF NOT EXISTS `{$prefix}np_api_log` (
+			`log_id` int NOT NULL AUTO_INCREMENT,
+			`method` varchar(128) DEFAULT NULL,
+			`request` longtext,
+			`response` longtext,
+			`success` tinyint(1) DEFAULT '0',
+			`created_at` datetime DEFAULT NULL,
+			PRIMARY KEY (`log_id`),
+			KEY `created_at` (`created_at`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+		$this->load->model('setting/event');
+		$this->model_setting_event->deleteEventByCode('nova_poshta_premium_order_added');
+		$this->model_setting_event->deleteEventByCode('nova_poshta_premium_order_history_added');
+		$this->model_setting_event->deleteEventByCode('nova_poshta_premium_footer_inject');
+		$this->model_setting_event->addEvent([
+			'code'        => 'nova_poshta_premium_order_added',
+			'description' => 'Nova Poshta Premium — capture cart shipping selection on order create',
+			'trigger'     => 'catalog/model/checkout/order/addOrder/after',
+			'action'      => 'extension/nova_poshta_premium/events.orderAdded',
+			'status'      => 1,
+			'sort_order'  => 10,
+		]);
+		$this->model_setting_event->addEvent([
+			'code'        => 'nova_poshta_premium_order_history_added',
+			'description' => 'Nova Poshta Premium — auto-create TTN on order status reaching the configured trigger',
+			'trigger'     => 'catalog/model/checkout/order/addHistory/after',
+			'action'      => 'extension/nova_poshta_premium/events.orderHistoryAdded',
+			'status'      => 1,
+			'sort_order'  => 10,
+		]);
+		$this->model_setting_event->addEvent([
+			'code'        => 'nova_poshta_premium_footer_inject',
+			'description' => 'Nova Poshta Premium — inject checkout picker on storefront footer render',
+			'trigger'     => 'catalog/view/common/footer/after',
+			'action'      => 'extension/nova_poshta_premium/events.footerInject',
+			'status'      => 1,
+			'sort_order'  => 10,
+		]);
+
+		$this->load->model('setting/cron');
+		// Best-effort cleanup of any prior install
+		try { $this->model_setting_cron->deleteCronByCode('nova_poshta_premium_poll'); } catch (\Throwable $e) {}
+		try { $this->model_setting_cron->deleteCronByCode('nova_poshta_premium_webhook'); } catch (\Throwable $e) {}
+		try { $this->model_setting_cron->deleteCronByCode('nova_poshta_premium_license'); } catch (\Throwable $e) {}
+
+		// OC 4.1.0.3 signature: addCron(code, description, cycle, action, status)
+		$this->model_setting_cron->addCron('nova_poshta_premium_poll', 'Nova Poshta Premium — poll shipment status', 'hour', 'extension/nova_poshta_premium/cron.pollStatus', true);
+		$this->model_setting_cron->addCron('nova_poshta_premium_webhook', 'Nova Poshta Premium — dispatch queued outbound webhooks', 'hour', 'extension/nova_poshta_premium/cron.dispatchWebhooks', true);
+		$this->model_setting_cron->addCron('nova_poshta_premium_license', 'Nova Poshta Premium — daily license check', 'day', 'extension/nova_poshta_premium/cron.licenseCheck', true);
+
+		// Grant access+modify on our admin routes to the Top Administrator user group (id=1).
+		$this->load->model('user/user_group');
+		foreach (['extension/nova_poshta_premium/shipping/nova_poshta', 'extension/nova_poshta_premium/shipment'] as $route) {
+			$this->model_user_user_group->addPermission((int)$this->user->getGroupId(), 'access', $route);
+			$this->model_user_user_group->addPermission((int)$this->user->getGroupId(), 'modify', $route);
+		}
+	}
+
+	public function uninstall(): void {
+		$this->load->model('setting/event');
+		foreach (['nova_poshta_premium_order_added', 'nova_poshta_premium_order_history_added', 'nova_poshta_premium_footer_inject'] as $code) {
+			try { $this->model_setting_event->deleteEventByCode($code); } catch (\Throwable $e) {}
+		}
+		$this->load->model('setting/cron');
+		foreach (['nova_poshta_premium_poll', 'nova_poshta_premium_webhook', 'nova_poshta_premium_license'] as $code) {
+			try { $this->model_setting_cron->deleteCronByCode($code); } catch (\Throwable $e) {}
+		}
+		// Tables intentionally preserved on uninstall to avoid losing shipment history.
+	}
+
+	public function setup(): void {
+		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');
+		$json = [];
+		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
+			$json['error'] = $this->language->get('error_permission');
+		} else {
+			try {
+				$this->install();
+				$json['success'] = $this->language->get('text_setup_ok');
+			} catch (\Throwable $e) {
+				$json['error'] = 'Setup failed: ' . $e->getMessage();
+			}
+		}
+		$this->jsonResponse($json);
+	}
+
 	public function index(): void {
 		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');
 
 		$this->document->setTitle($this->language->get('heading_title'));
 
+		$ut = $this->session->data['user_token'];
+
 		$data['breadcrumbs'] = [
-			[
-				'text' => $this->language->get('text_home'),
-				'href' => $this->url->link('common/dashboard', 'user_token=' . $this->session->data['user_token']),
-			],
-			[
-				'text' => $this->language->get('text_extension'),
-				'href' => $this->url->link('marketplace/extension', 'user_token=' . $this->session->data['user_token'] . '&type=shipping'),
-			],
-			[
-				'text' => $this->language->get('heading_title'),
-				'href' => $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta', 'user_token=' . $this->session->data['user_token']),
-			],
+			['text' => $this->language->get('text_home'), 'href' => $this->url->link('common/dashboard', 'user_token=' . $ut)],
+			['text' => $this->language->get('text_extension'), 'href' => $this->url->link('marketplace/extension', 'user_token=' . $ut . '&type=shipping')],
+			['text' => $this->language->get('heading_title'), 'href' => $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta', 'user_token=' . $ut)],
 		];
 
-		$ut = $this->session->data['user_token'];
 		$data['save']           = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.save', 'user_token=' . $ut);
 		$data['test']           = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.test', 'user_token=' . $ut);
 		$data['search_cities']  = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.searchCities', 'user_token=' . $ut);
 		$data['get_warehouses'] = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.getWarehouses', 'user_token=' . $ut);
 		$data['quote_preview']  = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.quotePreview', 'user_token=' . $ut);
+		$data['setup_url']      = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.setup', 'user_token=' . $ut);
+		$data['shipments_url']  = $this->url->link('extension/nova_poshta_premium/shipment.list', 'user_token=' . $ut);
+		$data['url_license_check']= $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.licenseCheck', 'user_token=' . $ut);
 		$data['back']           = $this->url->link('marketplace/extension', 'user_token=' . $ut . '&type=shipping');
 
-		$data['shipping_nova_poshta_api_key']             = $this->config->get('shipping_nova_poshta_api_key');
-		$data['shipping_nova_poshta_default_cost']        = $this->config->get('shipping_nova_poshta_default_cost');
-		$data['shipping_nova_poshta_status']              = $this->config->get('shipping_nova_poshta_status');
-		$data['shipping_nova_poshta_sort_order']          = $this->config->get('shipping_nova_poshta_sort_order');
-		$data['shipping_nova_poshta_tax_class_id']        = (int)$this->config->get('shipping_nova_poshta_tax_class_id');
-		$data['shipping_nova_poshta_geo_zone_id']         = (int)$this->config->get('shipping_nova_poshta_geo_zone_id');
-		$data['shipping_nova_poshta_sender_city_ref']     = (string)$this->config->get('shipping_nova_poshta_sender_city_ref');
-		$data['shipping_nova_poshta_sender_city_name']    = (string)$this->config->get('shipping_nova_poshta_sender_city_name');
-		$data['shipping_nova_poshta_sender_warehouse_ref']  = (string)$this->config->get('shipping_nova_poshta_sender_warehouse_ref');
-		$data['shipping_nova_poshta_sender_warehouse_name'] = (string)$this->config->get('shipping_nova_poshta_sender_warehouse_name');
+		$data['shipping_nova_poshta_api_key']              = $this->apiKey();
+		$data['shipping_nova_poshta_default_cost']         = $this->config->get('shipping_nova_poshta_default_cost');
+		$data['shipping_nova_poshta_status']               = $this->config->get('shipping_nova_poshta_status');
+		$data['shipping_nova_poshta_sort_order']           = $this->config->get('shipping_nova_poshta_sort_order');
+		$data['shipping_nova_poshta_tax_class_id']         = (int)$this->config->get('shipping_nova_poshta_tax_class_id');
+		$data['shipping_nova_poshta_geo_zone_id']          = (int)$this->config->get('shipping_nova_poshta_geo_zone_id');
+		$data['shipping_nova_poshta_sender_city_ref']      = (string)$this->config->get('shipping_nova_poshta_sender_city_ref');
+		$data['shipping_nova_poshta_sender_city_name']     = (string)$this->config->get('shipping_nova_poshta_sender_city_name');
+		$data['shipping_nova_poshta_sender_warehouse_ref'] = (string)$this->config->get('shipping_nova_poshta_sender_warehouse_ref');
+		$data['shipping_nova_poshta_sender_warehouse_name']= (string)$this->config->get('shipping_nova_poshta_sender_warehouse_name');
+		$data['shipping_nova_poshta_auto_ttn_status_id']   = (int)$this->config->get('shipping_nova_poshta_auto_ttn_status_id');
+		$data['shipping_nova_poshta_license_key']          = (string)$this->config->get('shipping_nova_poshta_license_key');
+		$data['shipping_nova_poshta_license_status']       = (string)$this->config->get('shipping_nova_poshta_license_status');
 
 		$this->load->model('localisation/tax_class');
 		$data['tax_classes'] = $this->model_localisation_tax_class->getTaxClasses();
 
 		$this->load->model('localisation/geo_zone');
 		$data['geo_zones'] = $this->model_localisation_geo_zone->getGeoZones();
+
+		$this->load->model('localisation/order_status');
+		$data['order_statuses'] = $this->model_localisation_order_status->getOrderStatuses();
 
 		$data['header']      = $this->load->controller('common/header');
 		$data['column_left'] = $this->load->controller('common/column_left');
@@ -76,8 +235,13 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		}
 
 		if (!$json) {
+			$post = $this->request->post;
+			// Encrypt API key at rest if it changed (plain incoming → store encrypted).
+			if (isset($post['shipping_nova_poshta_api_key']) && $post['shipping_nova_poshta_api_key'] !== '') {
+				$post['shipping_nova_poshta_api_key'] = \Opencart\System\Library\NovaPoshta\Crypto::encrypt(trim($post['shipping_nova_poshta_api_key']));
+			}
 			$this->load->model('setting/setting');
-			$this->model_setting_setting->editSetting('shipping_nova_poshta', $this->request->post);
+			$this->model_setting_setting->editSetting('shipping_nova_poshta', $post);
 			$json['success'] = $this->language->get('text_success');
 		}
 
@@ -86,20 +250,20 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 
 	public function test(): void {
 		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');
-
 		$json = [];
 
 		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
 			$json['error'] = $this->language->get('error_permission');
 		} else {
-			$key = trim((string)($this->request->post['shipping_nova_poshta_api_key'] ?? $this->config->get('shipping_nova_poshta_api_key')));
-
+			$key = trim((string)($this->request->post['shipping_nova_poshta_api_key'] ?? ''));
+			if ($key === '') {
+				$key = $this->apiKey();
+			}
 			if ($key === '') {
 				$json['error'] = $this->language->get('error_api_key_empty');
 			} else {
 				$client   = new \Opencart\System\Library\NovaPoshta\Client($key);
 				$response = $client->testConnection();
-
 				if (!empty($response['success'])) {
 					$count = is_array($response['data']) ? count($response['data']) : 0;
 					$json['success'] = sprintf($this->language->get('text_test_ok'), $count);
@@ -114,14 +278,13 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 
 	public function searchCities(): void {
 		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');
-
 		$json = ['cities' => []];
 
 		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
 			$json['error'] = $this->language->get('error_permission');
 		} else {
 			$query = trim((string)($this->request->post['q'] ?? $this->request->get['q'] ?? ''));
-			$key   = (string)$this->config->get('shipping_nova_poshta_api_key');
+			$key   = $this->apiKey();
 
 			if ($key === '') {
 				$json['error'] = $this->language->get('error_api_key_empty');
@@ -150,14 +313,13 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 
 	public function getWarehouses(): void {
 		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');
-
 		$json = ['warehouses' => []];
 
 		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
 			$json['error'] = $this->language->get('error_permission');
 		} else {
 			$cityRef = trim((string)($this->request->post['city_ref'] ?? $this->request->get['city_ref'] ?? ''));
-			$key     = (string)$this->config->get('shipping_nova_poshta_api_key');
+			$key     = $this->apiKey();
 
 			if ($key === '') {
 				$json['error'] = $this->language->get('error_api_key_empty');
@@ -187,15 +349,13 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 
 	public function quotePreview(): void {
 		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');
-
 		$json = [];
 
 		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
 			$json['error'] = $this->language->get('error_permission');
 		} else {
-			$key       = (string)$this->config->get('shipping_nova_poshta_api_key');
+			$key       = $this->apiKey();
 			$senderRef = (string)$this->config->get('shipping_nova_poshta_sender_city_ref');
-			// Kyiv city ref — well-known constant for the preview destination
 			$kyivRef   = '8d5a980d-391c-11dd-90d9-001a92567626';
 
 			if ($key === '') {
@@ -213,7 +373,6 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 					'CargoType'     => 'Cargo',
 					'SeatsAmount'   => '1',
 				]);
-
 				if (!empty($response['success']) && !empty($response['data'][0]['Cost'])) {
 					$json['success'] = sprintf($this->language->get('text_quote_ok'), (float)$response['data'][0]['Cost']);
 				} else {
@@ -222,6 +381,32 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			}
 		}
 
+		$this->jsonResponse($json);
+	}
+
+	public function licenseCheck(): void {
+		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');
+		$json = [];
+		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
+			$json['error'] = $this->language->get('error_permission');
+		} else {
+			$key = trim((string)($this->request->post['shipping_nova_poshta_license_key'] ?? $this->config->get('shipping_nova_poshta_license_key')));
+			if ($key === '') {
+				$json['error'] = $this->language->get('error_license_empty');
+			} else {
+				// STUB: real implementation would POST to https://vendor.tld/api/v1/license/verify
+				// with {key, domain} and verify HMAC-signed response. For dev we accept any
+				// non-empty key matching the NPP-XXXX-XXXX-XXXX format.
+				$valid = (bool)preg_match('/^NPP(-[A-Z0-9]{4}){3}$/i', $key);
+				$this->load->model('setting/setting');
+				$current = $this->model_setting_setting->getSetting('shipping_nova_poshta');
+				$current['shipping_nova_poshta_license_key']        = $key;
+				$current['shipping_nova_poshta_license_status']     = $valid ? 'valid' : 'invalid';
+				$current['shipping_nova_poshta_license_checked_at'] = date('Y-m-d H:i:s');
+				$this->model_setting_setting->editSetting('shipping_nova_poshta', $current);
+				$json[$valid ? 'success' : 'error'] = $this->language->get($valid ? 'text_license_ok' : 'text_license_bad');
+			}
+		}
 		$this->jsonResponse($json);
 	}
 }

@@ -1,0 +1,62 @@
+{{ header }}{{ column_left }}
+<div id="content">
+  <div class="page-header">
+    <div class="container-fluid">
+      <div class="float-end">
+        <a href="{{ back }}" data-bs-toggle="tooltip" title="{{ button_back }}" class="btn btn-light"><i class="fa-solid fa-reply"></i></a>
+      </div>
+      <h1>{{ heading_title }}</h1>
+      <ol class="breadcrumb">
+        {% for breadcrumb in breadcrumbs %}
+          <li class="breadcrumb-item"><a href="{{ breadcrumb.href }}">{{ breadcrumb.text }}</a></li>
+        {% endfor %}
+      </ol>
+    </div>
+  </div>
+  <div class="container-fluid">
+    <div class="card">
+      <div class="card-header"><i class="fa-solid fa-truck"></i> {{ text_list }}</div>
+      <div class="card-body">
+        <table class="table table-bordered table-hover">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>{{ column_order }}</th>
+              <th>{{ column_recipient }}</th>
+              <th>{{ column_ttn }}</th>
+              <th>{{ column_status }}</th>
+              <th>{{ column_created }}</th>
+              <th>{{ column_last_polled }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in shipments %}
+              <tr>
+                <td>{{ s.shipment_id }}</td>
+                <td><a href="{{ s.order_url }}">#{{ s.order_id }}</a></td>
+                <td>{{ s.recipient }}</td>
+                <td>
+                  {% if s.int_doc_number %}
+                    <a href="{{ s.tracking_url }}" target="_blank">{{ s.int_doc_number }}</a>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="badge {% if s.status_code == 9 %}bg-success{% elseif s.status_code > 0 %}bg-info{% else %}bg-secondary{% endif %}">
+                    {{ s.status_code }} · {{ s.status_text }}
+                  </span>
+                </td>
+                <td>{{ s.created_at }}</td>
+                <td>{{ s.last_polled_at }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="7" class="text-center text-muted">{{ text_empty }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{{ footer }}

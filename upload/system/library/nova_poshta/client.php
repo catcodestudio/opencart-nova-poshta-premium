@@ -47,4 +47,24 @@ class Client {
 	public function testConnection(): array {
 		return $this->call('Common', 'getCargoTypes');
 	}
+
+	public function quote(string $citySenderRef, string $cityRecipientRef, float $weightKg, float $cost, string $serviceType = 'WarehouseWarehouse'): array {
+		return $this->call('InternetDocument', 'getDocumentPrice', [
+			'CitySender'    => $citySenderRef,
+			'CityRecipient' => $cityRecipientRef,
+			'Weight'        => (string)max($weightKg, 0.1),
+			'ServiceType'   => $serviceType,
+			'Cost'          => (string)max((int)round($cost), 1),
+			'CargoType'     => 'Cargo',
+			'SeatsAmount'   => '1',
+		]);
+	}
+
+	public function trackStatus(array $intDocNumbers): array {
+		$docs = [];
+		foreach ($intDocNumbers as $n) {
+			$docs[] = ['DocumentNumber' => (string)$n];
+		}
+		return $this->call('TrackingDocument', 'getStatusDocuments', ['Documents' => $docs]);
+	}
 }
