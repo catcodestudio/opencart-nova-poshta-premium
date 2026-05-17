@@ -24,7 +24,7 @@
             <div class="col-sm-10">
               <div class="input-group">
                 <input type="text" name="shipping_nova_poshta_api_key" value="{{ shipping_nova_poshta_api_key }}" placeholder="{{ entry_api_key }}" id="input-api-key" class="form-control" autocomplete="off"/>
-                <button type="button" id="button-test" class="btn btn-outline-secondary"><i class="fa-solid fa-plug"></i> {{ button_test }}</button>
+                <button type="button" id="button-test" data-test-url="{{ test }}" class="btn btn-outline-secondary"><i class="fa-solid fa-plug"></i> {{ button_test }}</button>
               </div>
               <div id="test-result" class="form-text"></div>
             </div>
@@ -78,12 +78,14 @@
   </div>
 </div>
 <script>
-document.getElementById('button-test').addEventListener('click', () => {
+document.getElementById('button-test').addEventListener('click', (e) => {
+  const btn = e.currentTarget;
+  const url = btn.dataset.testUrl;
   const key = document.getElementById('input-api-key').value.trim();
   const result = document.getElementById('test-result');
   result.textContent = '...';
   result.className = 'form-text text-muted';
-  fetch('{{ test }}', {
+  fetch(url, {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
     body: new URLSearchParams({shipping_nova_poshta_api_key: key})
