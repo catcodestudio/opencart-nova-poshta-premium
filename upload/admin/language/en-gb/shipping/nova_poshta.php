@@ -28,6 +28,10 @@ $_['entry_status']          = 'Status';
 $_['entry_sort_order']      = 'Sort Order';
 $_['entry_sender_city']     = 'Sender City';
 $_['entry_sender_warehouse']= 'Sender Warehouse';
+$_['entry_sender_counterparty'] = 'Sender Counterparty';
+$_['entry_sender_contact']  = 'Sender Contact Person';
+$_['entry_sender_phone']    = 'Sender Phone (380…)';
+$_['button_load']           = 'Load';
 $_['entry_auto_ttn_status'] = 'Auto-create TTN on order status';
 $_['entry_license_key']     = 'License Key';
 

@@ -74,6 +74,43 @@
 
           <h5 class="text-muted mb-3 mt-4"><i class="fa-solid fa-robot"></i> {{ text_section_automation }}</h5>
           <div class="row mb-3">
+            <label for="input-sender-cp" class="col-sm-2 col-form-label">{{ entry_sender_counterparty }}</label>
+            <div class="col-sm-10">
+              <div class="input-group">
+                <select id="input-sender-cp" class="form-select" data-url="{{ url_counterparties }}" data-selected-ref="{{ shipping_nova_poshta_sender_counterparty_ref }}">
+                  {% if shipping_nova_poshta_sender_counterparty_ref %}
+                    <option value="{{ shipping_nova_poshta_sender_counterparty_ref }}" selected>{{ shipping_nova_poshta_sender_counterparty_name }}</option>
+                  {% else %}
+                    <option value="">—</option>
+                  {% endif %}
+                </select>
+                <button type="button" id="button-load-cp" class="btn btn-outline-secondary"><i class="fa-solid fa-rotate"></i> {{ button_load }}</button>
+              </div>
+              <input type="hidden" name="shipping_nova_poshta_sender_counterparty_ref" id="input-sender-cp-ref" value="{{ shipping_nova_poshta_sender_counterparty_ref }}"/>
+              <input type="hidden" name="shipping_nova_poshta_sender_counterparty_name" id="input-sender-cp-name" value="{{ shipping_nova_poshta_sender_counterparty_name }}"/>
+            </div>
+          </div>
+          <div class="row mb-3">
+            <label for="input-sender-contact" class="col-sm-2 col-form-label">{{ entry_sender_contact }}</label>
+            <div class="col-sm-10">
+              <select id="input-sender-contact" class="form-select" data-url="{{ url_contacts }}" data-selected-ref="{{ shipping_nova_poshta_sender_contact_ref }}">
+                {% if shipping_nova_poshta_sender_contact_ref %}
+                  <option value="{{ shipping_nova_poshta_sender_contact_ref }}" data-phone="{{ shipping_nova_poshta_sender_phone }}" selected>{{ shipping_nova_poshta_sender_contact_name }}</option>
+                {% else %}
+                  <option value="">—</option>
+                {% endif %}
+              </select>
+              <input type="hidden" name="shipping_nova_poshta_sender_contact_ref" id="input-sender-contact-ref" value="{{ shipping_nova_poshta_sender_contact_ref }}"/>
+              <input type="hidden" name="shipping_nova_poshta_sender_contact_name" id="input-sender-contact-name" value="{{ shipping_nova_poshta_sender_contact_name }}"/>
+            </div>
+          </div>
+          <div class="row mb-3">
+            <label for="input-sender-phone" class="col-sm-2 col-form-label">{{ entry_sender_phone }}</label>
+            <div class="col-sm-10">
+              <input type="text" name="shipping_nova_poshta_sender_phone" value="{{ shipping_nova_poshta_sender_phone }}" placeholder="380XXXXXXXXX" id="input-sender-phone" class="form-control"/>
+            </div>
+          </div>
+          <div class="row mb-3">
             <label for="input-auto-ttn-status" class="col-sm-2 col-form-label">{{ entry_auto_ttn_status }}</label>
             <div class="col-sm-10">
               <select name="shipping_nova_poshta_auto_ttn_status_id" id="input-auto-ttn-status" class="form-select">
@@ -253,6 +290,65 @@
       quoteR.className = 'ms-2 ' + (d.success ? 'text-success' : 'text-danger');
     });
   });
+
+  // Sender counterparty + contact loaders
+  const cpSel = document.getElementById('input-sender-cp');
+  const cpRefHidden = document.getElementById('input-sender-cp-ref');
+  const cpNameHidden = document.getElementById('input-sender-cp-name');
+  const contactSel = document.getElementById('input-sender-contact');
+  const contactRefHidden = document.getElementById('input-sender-contact-ref');
+  const contactNameHidden = document.getElementById('input-sender-contact-name');
+  const senderPhone = document.getElementById('input-sender-phone');
+
+  const loadCps = () => {
+    cpSel.innerHTML = '<option value="">...</option>';
+    post(cpSel.dataset.url).then(d => {
+      cpSel.innerHTML = '<option value="">—</option>';
+      const want = cpSel.dataset.selectedRef || cpRefHidden.value;
+      (d.counterparties || []).forEach(c => {
+        const o = document.createElement('option');
+        o.value = c.ref; o.textContent = c.name + (c.type ? ' (' + c.type + ')' : '');
+        if (c.ref === want) o.selected = true;
+        cpSel.appendChild(o);
+      });
+      if (cpSel.value) loadContacts(cpSel.value);
+    });
+  };
+  const loadContacts = (cpRef) => {
+    contactSel.innerHTML = '<option value="">...</option>';
+    post(contactSel.dataset.url, {counterparty_ref: cpRef}).then(d => {
+      contactSel.innerHTML = '<option value="">—</option>';
+      const want = contactSel.dataset.selectedRef || contactRefHidden.value;
+      (d.contacts || []).forEach(c => {
+        const o = document.createElement('option');
+        o.value = c.ref; o.textContent = c.name; o.dataset.phone = c.phone || '';
+        if (c.ref === want) o.selected = true;
+        contactSel.appendChild(o);
+      });
+      if (contactSel.value && contactSel.selectedOptions[0]?.dataset.phone) {
+        if (!senderPhone.value) senderPhone.value = contactSel.selectedOptions[0].dataset.phone;
+      }
+    });
+  };
+  document.getElementById('button-load-cp').addEventListener('click', loadCps);
+  cpSel.addEventListener('change', () => {
+    cpRefHidden.value = cpSel.value;
+    cpNameHidden.value = cpSel.selectedOptions[0]?.textContent || '';
+    contactSel.dataset.selectedRef = '';
+    contactRefHidden.value = '';
+    contactNameHidden.value = '';
+    if (cpSel.value) loadContacts(cpSel.value);
+  });
+  contactSel.addEventListener('change', () => {
+    contactRefHidden.value = contactSel.value;
+    contactNameHidden.value = contactSel.selectedOptions[0]?.textContent || '';
+    const phone = contactSel.selectedOptions[0]?.dataset.phone || '';
+    if (phone) senderPhone.value = phone;
+  });
+  // Auto-load counterparties on page load if API key configured but no CP picked yet
+  if (!cpRefHidden.value && document.getElementById('input-api-key').value.trim()) {
+    loadCps();
+  }
 
   const btnLicense = document.getElementById('button-license');
   if (btnLicense) {

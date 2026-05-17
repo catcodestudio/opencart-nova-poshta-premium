@@ -28,6 +28,10 @@ $_['entry_status']          = 'Статус';
 $_['entry_sort_order']      = 'Порядок сортування';
 $_['entry_sender_city']     = 'Місто відправника';
 $_['entry_sender_warehouse']= 'Склад відправника';
+$_['entry_sender_counterparty'] = 'Контрагент-відправник';
+$_['entry_sender_contact']  = 'Контактна особа відправника';
+$_['entry_sender_phone']    = 'Телефон відправника (380…)';
+$_['button_load']           = 'Завантажити';
 $_['entry_auto_ttn_status'] = 'Авто-створення ТТН при статусі';
 $_['entry_license_key']     = 'Ліцензійний ключ';
 

@@ -86,10 +86,62 @@ class Events extends \Opencart\System\Engine\Controller {
 		if ($key === '') {
 			return;
 		}
-		// MVP: we do not yet collect sender Counterparty refs in admin settings,
-		// so a real InternetDocument.save will fail without them. We record the
-		// intent and surface it in the dashboard; full TTN automation is wired
-		// once Sender Counterparty config lands in v1.1.
-		$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET status_text = 'Awaiting sender counterparty config', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
+		$senderRef       = (string)$this->config->get('shipping_nova_poshta_sender_counterparty_ref');
+		$senderContact   = (string)$this->config->get('shipping_nova_poshta_sender_contact_ref');
+		$senderPhone     = (string)$this->config->get('shipping_nova_poshta_sender_phone');
+		$senderCityRef   = (string)$this->config->get('shipping_nova_poshta_sender_city_ref');
+		$senderWhRef     = (string)$this->config->get('shipping_nova_poshta_sender_warehouse_ref');
+		if ($senderRef === '' || $senderContact === '' || $senderPhone === '' || $senderCityRef === '' || $senderWhRef === '') {
+			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET status_text = 'Sender config incomplete', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
+			return;
+		}
+
+		// Fetch order details for recipient name/phone + weight/value.
+		$this->load->model('checkout/order');
+		$order = $this->model_checkout_order->getOrder($order_id);
+		if (!$order) {
+			return;
+		}
+		$products = $this->db->query("SELECT op.name, op.quantity, op.price, COALESCE(p.weight, 0) AS weight FROM `" . DB_PREFIX . "order_product` op LEFT JOIN `" . DB_PREFIX . "product` p ON p.product_id = op.product_id WHERE op.order_id = " . $order_id)->rows;
+		$weight = 0.0;
+		$cost   = 0.0;
+		$descParts = [];
+		foreach ($products as $p) {
+			$weight += (float)$p['weight'] * (int)$p['quantity'];
+			$cost   += (float)$p['price']  * (int)$p['quantity'];
+			$descParts[] = trim((string)$p['name']);
+		}
+		if ($weight <= 0) $weight = 0.5;
+		if ($cost   <= 0) $cost   = (float)($order['total'] ?? 100);
+
+		$client = new \Opencart\System\Library\NovaPoshta\Client($key);
+		$resp = $client->createTTN([
+			'sender_ref'             => $senderRef,
+			'sender_contact_ref'     => $senderContact,
+			'sender_phone'           => $senderPhone,
+			'sender_city_ref'        => $senderCityRef,
+			'sender_warehouse_ref'   => $senderWhRef,
+			'recipient_city_ref'     => (string)$row['recipient_city_ref'],
+			'recipient_warehouse_ref'=> (string)$row['recipient_warehouse_ref'],
+			'recipient_name'         => trim(($order['shipping_firstname'] ?? '') . ' ' . ($order['shipping_lastname'] ?? '')) ?: ($order['firstname'] . ' ' . $order['lastname']),
+			'recipient_phone'        => (string)($order['telephone'] ?? ''),
+			'weight'                 => $weight,
+			'cost'                   => $cost,
+			'description'            => mb_substr(implode(', ', $descParts) ?: 'Order #' . $order_id, 0, 200),
+			'service_type'           => 'WarehouseWarehouse',
+			'payer_type'             => 'Recipient',
+			'payment_method'         => 'Cash',
+			'cargo_type'             => 'Cargo',
+			'seats_amount'           => 1,
+		]);
+
+		if (!empty($resp['success']) && !empty($resp['data'][0]['IntDocNumber'])) {
+			$intDoc = (string)$resp['data'][0]['IntDocNumber'];
+			$intRef = (string)($resp['data'][0]['Ref'] ?? '');
+			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET int_doc_number = '" . $this->db->escape($intDoc) . "', int_doc_ref = '" . $this->db->escape($intRef) . "', status_code = 1, status_text = 'Created', weight = " . (float)$weight . ", declared_cost = " . (float)$cost . ", recipient_phone = '" . $this->db->escape((string)$order['telephone']) . "', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
+		} else {
+			$err = is_array($resp['errors'] ?? null) ? implode('; ', $resp['errors']) : 'unknown error';
+			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET status_text = '" . $this->db->escape(mb_substr('TTN error: ' . $err, 0, 250)) . "', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
+		}
 	}
 }

@@ -193,6 +193,8 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		$data['setup_url']      = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.setup', 'user_token=' . $ut);
 		$data['shipments_url']  = $this->url->link('extension/nova_poshta_premium/shipment.list', 'user_token=' . $ut);
 		$data['url_license_check']= $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.licenseCheck', 'user_token=' . $ut);
+		$data['url_counterparties'] = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.loadCounterparties', 'user_token=' . $ut);
+		$data['url_contacts']       = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.loadContactPersons', 'user_token=' . $ut);
 		$data['back']           = $this->url->link('marketplace/extension', 'user_token=' . $ut . '&type=shipping');
 
 		$data['shipping_nova_poshta_api_key']              = $this->apiKey();
@@ -205,6 +207,11 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		$data['shipping_nova_poshta_sender_city_name']     = (string)$this->config->get('shipping_nova_poshta_sender_city_name');
 		$data['shipping_nova_poshta_sender_warehouse_ref'] = (string)$this->config->get('shipping_nova_poshta_sender_warehouse_ref');
 		$data['shipping_nova_poshta_sender_warehouse_name']= (string)$this->config->get('shipping_nova_poshta_sender_warehouse_name');
+		$data['shipping_nova_poshta_sender_counterparty_ref']  = (string)$this->config->get('shipping_nova_poshta_sender_counterparty_ref');
+		$data['shipping_nova_poshta_sender_counterparty_name'] = (string)$this->config->get('shipping_nova_poshta_sender_counterparty_name');
+		$data['shipping_nova_poshta_sender_contact_ref']       = (string)$this->config->get('shipping_nova_poshta_sender_contact_ref');
+		$data['shipping_nova_poshta_sender_contact_name']      = (string)$this->config->get('shipping_nova_poshta_sender_contact_name');
+		$data['shipping_nova_poshta_sender_phone']             = (string)$this->config->get('shipping_nova_poshta_sender_phone');
 		$data['shipping_nova_poshta_auto_ttn_status_id']   = (int)$this->config->get('shipping_nova_poshta_auto_ttn_status_id');
 		$data['shipping_nova_poshta_license_key']          = (string)$this->config->get('shipping_nova_poshta_license_key');
 		$data['shipping_nova_poshta_license_status']       = (string)$this->config->get('shipping_nova_poshta_license_status');
@@ -381,6 +388,63 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			}
 		}
 
+		$this->jsonResponse($json);
+	}
+
+	public function loadCounterparties(): void {
+		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');
+		$json = ['counterparties' => []];
+		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
+			$json['error'] = $this->language->get('error_permission');
+		} else {
+			$key = $this->apiKey();
+			if ($key === '') {
+				$json['error'] = $this->language->get('error_api_key_empty');
+			} else {
+				$client = new \Opencart\System\Library\NovaPoshta\Client($key);
+				$resp = $client->getSenderCounterparties();
+				if (!empty($resp['success']) && is_array($resp['data'] ?? null)) {
+					foreach ($resp['data'] as $row) {
+						$json['counterparties'][] = [
+							'ref'  => (string)($row['Ref'] ?? ''),
+							'name' => (string)($row['Description'] ?? ''),
+							'type' => (string)($row['CounterpartyType'] ?? ''),
+						];
+					}
+				} else {
+					$json['error'] = (is_array($resp['errors'] ?? null) ? implode('; ', $resp['errors']) : 'Unknown error');
+				}
+			}
+		}
+		$this->jsonResponse($json);
+	}
+
+	public function loadContactPersons(): void {
+		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');
+		$json = ['contacts' => []];
+		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
+			$json['error'] = $this->language->get('error_permission');
+		} else {
+			$key = $this->apiKey();
+			$cpRef = (string)($this->request->post['counterparty_ref'] ?? '');
+			if ($key === '' || $cpRef === '') {
+				$json['error'] = $this->language->get('error_api_key_empty');
+			} else {
+				$client = new \Opencart\System\Library\NovaPoshta\Client($key);
+				$resp = $client->getContactPersons($cpRef);
+				if (!empty($resp['success']) && is_array($resp['data'] ?? null)) {
+					foreach ($resp['data'] as $row) {
+						$json['contacts'][] = [
+							'ref'   => (string)($row['Ref'] ?? ''),
+							'name'  => (string)($row['Description'] ?? ''),
+							'phone' => (string)($row['Phones'] ?? ''),
+						];
+					}
+				} else {
+					$json['error'] = (is_array($resp['errors'] ?? null) ? implode('; ', $resp['errors']) : 'Unknown error');
+				}
+			}
+		}
 		$this->jsonResponse($json);
 	}
 

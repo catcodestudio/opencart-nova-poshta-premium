@@ -11,10 +11,10 @@ class Crypto {
 	private const PREFIX = 'np$';
 
 	private static function secret(): string {
-		// Stable across requests, unique-ish per install. AUTH_KEY-style derivation
-		// would be better but OC has no per-install secret constant; this is the
-		// next best deterministic source.
-		$material = DIR_APPLICATION . DIR_OPENCART;
+		// Stable across application contexts (admin/catalog/cron/cli).
+		// DIR_APPLICATION differs per app, so we use DIR_OPENCART (root) +
+		// DB_DATABASE (defined in config.php) which are identical everywhere.
+		$material = DIR_OPENCART . (defined('DB_DATABASE') ? DB_DATABASE : '');
 		return hash('sha256', 'NovaPoshtaPremium|' . $material, true);
 	}
 
