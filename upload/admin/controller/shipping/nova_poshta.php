@@ -3,6 +3,7 @@ namespace Opencart\Admin\Controller\Extension\NovaPoshtaPremium\Shipping;
 
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/client.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/crypto.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/cache.php';
 
 class NovaPoshta extends \Opencart\System\Engine\Controller {
 	private function jsonResponse(array $data): void {
@@ -85,6 +86,27 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			KEY `status_next` (`status`,`next_retry_at`)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+		$this->db->query("CREATE TABLE IF NOT EXISTS `{$prefix}np_cities` (
+			`ref` char(36) NOT NULL,
+			`description` varchar(255) DEFAULT NULL,
+			`area_description` varchar(255) DEFAULT NULL,
+			`updated_at` datetime DEFAULT NULL,
+			PRIMARY KEY (`ref`),
+			KEY `description` (`description`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+		$this->db->query("CREATE TABLE IF NOT EXISTS `{$prefix}np_warehouses` (
+			`ref` char(36) NOT NULL,
+			`city_ref` char(36) NOT NULL,
+			`number` varchar(16) DEFAULT NULL,
+			`description` varchar(512) DEFAULT NULL,
+			`type_ref` char(36) DEFAULT NULL,
+			`updated_at` datetime DEFAULT NULL,
+			PRIMARY KEY (`ref`),
+			KEY `city_ref` (`city_ref`),
+			KEY `updated_at` (`updated_at`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
 		$this->db->query("CREATE TABLE IF NOT EXISTS `{$prefix}np_api_log` (
 			`log_id` int NOT NULL AUTO_INCREMENT,
 			`method` varchar(128) DEFAULT NULL,
@@ -135,6 +157,8 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		$this->model_setting_cron->addCron('nova_poshta_premium_poll', 'Nova Poshta Premium — poll shipment status', 'hour', 'extension/nova_poshta_premium/cron.pollStatus', true);
 		$this->model_setting_cron->addCron('nova_poshta_premium_webhook', 'Nova Poshta Premium — dispatch queued outbound webhooks', 'hour', 'extension/nova_poshta_premium/cron.dispatchWebhooks', true);
 		$this->model_setting_cron->addCron('nova_poshta_premium_license', 'Nova Poshta Premium — daily license check', 'day', 'extension/nova_poshta_premium/cron.licenseCheck', true);
+		try { $this->model_setting_cron->deleteCronByCode('nova_poshta_premium_sync_cities'); } catch (\Throwable $e) {}
+		$this->model_setting_cron->addCron('nova_poshta_premium_sync_cities', 'Nova Poshta Premium — weekly full city sync', 'week', 'extension/nova_poshta_premium/cron.syncCities', true);
 
 		// Grant access+modify on our admin routes to the Top Administrator user group (id=1).
 		$this->load->model('user/user_group');
@@ -150,7 +174,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			try { $this->model_setting_event->deleteEventByCode($code); } catch (\Throwable $e) {}
 		}
 		$this->load->model('setting/cron');
-		foreach (['nova_poshta_premium_poll', 'nova_poshta_premium_webhook', 'nova_poshta_premium_license'] as $code) {
+		foreach (['nova_poshta_premium_poll', 'nova_poshta_premium_webhook', 'nova_poshta_premium_license', 'nova_poshta_premium_sync_cities'] as $code) {
 			try { $this->model_setting_cron->deleteCronByCode($code); } catch (\Throwable $e) {}
 		}
 		// Tables intentionally preserved on uninstall to avoid losing shipment history.
@@ -291,30 +315,12 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			$json['error'] = $this->language->get('error_permission');
 		} else {
 			$query = trim((string)($this->request->post['q'] ?? $this->request->get['q'] ?? ''));
-			$key   = $this->apiKey();
-
-			if ($key === '') {
-				$json['error'] = $this->language->get('error_api_key_empty');
-			} elseif ($query === '') {
+			if ($query === '') {
 				$json['error'] = $this->language->get('error_query_empty');
 			} else {
-				$client   = new \Opencart\System\Library\NovaPoshta\Client($key);
-				$response = $client->call('Address', 'getCities', ['FindByString' => $query, 'Limit' => '20']);
-
-				if (!empty($response['success']) && is_array($response['data'])) {
-					foreach ($response['data'] as $row) {
-						$json['cities'][] = [
-							'ref'  => (string)($row['Ref'] ?? ''),
-							'name' => (string)($row['Description'] ?? ''),
-							'area' => (string)($row['AreaDescription'] ?? ''),
-						];
-					}
-				} else {
-					$json['error'] = $this->language->get('text_test_fail') . ' ' . (is_array($response['errors'] ?? null) ? implode('; ', $response['errors']) : '');
-				}
+				$json = ['cities' => \Opencart\System\Library\NovaPoshta\Cache::searchCities($this->db, $query, $this->apiKey())];
 			}
 		}
-
 		$this->jsonResponse($json);
 	}
 
@@ -326,31 +332,12 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			$json['error'] = $this->language->get('error_permission');
 		} else {
 			$cityRef = trim((string)($this->request->post['city_ref'] ?? $this->request->get['city_ref'] ?? ''));
-			$key     = $this->apiKey();
-
-			if ($key === '') {
-				$json['error'] = $this->language->get('error_api_key_empty');
-			} elseif ($cityRef === '') {
+			if ($cityRef === '') {
 				$json['error'] = $this->language->get('error_city_empty');
 			} else {
-				$client   = new \Opencart\System\Library\NovaPoshta\Client($key);
-				$response = $client->call('Address', 'getWarehouses', ['CityRef' => $cityRef, 'Limit' => '500']);
-
-				if (!empty($response['success']) && is_array($response['data'])) {
-					foreach ($response['data'] as $row) {
-						$json['warehouses'][] = [
-							'ref'        => (string)($row['Ref'] ?? ''),
-							'number'     => (string)($row['Number'] ?? ''),
-							'description'=> (string)($row['Description'] ?? ''),
-							'type_ref'   => (string)($row['TypeOfWarehouse'] ?? ''),
-						];
-					}
-				} else {
-					$json['error'] = $this->language->get('text_test_fail') . ' ' . (is_array($response['errors'] ?? null) ? implode('; ', $response['errors']) : '');
-				}
+				$json = ['warehouses' => \Opencart\System\Library\NovaPoshta\Cache::getWarehouses($this->db, $cityRef, $this->apiKey())];
 			}
 		}
-
 		$this->jsonResponse($json);
 	}
 

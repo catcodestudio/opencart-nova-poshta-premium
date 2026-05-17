@@ -3,6 +3,7 @@ namespace Opencart\Catalog\Controller\Extension\NovaPoshtaPremium;
 
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/client.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/crypto.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/cache.php';
 
 class Cron extends \Opencart\System\Engine\Controller {
 	public function pollStatus(): void {
@@ -89,5 +90,10 @@ class Cron extends \Opencart\System\Engine\Controller {
 		// STUB: dev mode skips remote verification. Production would POST
 		// to vendor license server and update shipping_nova_poshta_license_status.
 		// Intentionally a no-op when no key configured.
+	}
+
+	public function syncCities(): void {
+		$key = \Opencart\System\Library\NovaPoshta\Crypto::decrypt((string)$this->config->get('shipping_nova_poshta_api_key'));
+		\Opencart\System\Library\NovaPoshta\Cache::syncCities($this->db, $key);
 	}
 }

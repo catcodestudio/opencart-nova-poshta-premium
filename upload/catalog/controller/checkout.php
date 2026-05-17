@@ -3,6 +3,7 @@ namespace Opencart\Catalog\Controller\Extension\NovaPoshtaPremium;
 
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/client.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/crypto.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/cache.php';
 
 class Checkout extends \Opencart\System\Engine\Controller {
 	private function jsonResponse(array $data): void {
@@ -19,48 +20,21 @@ class Checkout extends \Opencart\System\Engine\Controller {
 	}
 
 	public function searchCities(): void {
-		$json = ['cities' => []];
 		$query = trim((string)($this->request->post['q'] ?? $this->request->get['q'] ?? ''));
-		$key   = $this->apiKey();
-		if ($key === '' || $query === '') {
-			$this->jsonResponse($json);
+		if ($query === '') {
+			$this->jsonResponse(['cities' => []]);
 			return;
 		}
-		$client   = new \Opencart\System\Library\NovaPoshta\Client($key);
-		$response = $client->call('Address', 'getCities', ['FindByString' => $query, 'Limit' => '15']);
-		if (!empty($response['success']) && is_array($response['data'])) {
-			foreach ($response['data'] as $row) {
-				$json['cities'][] = [
-					'ref'  => (string)($row['Ref'] ?? ''),
-					'name' => (string)($row['Description'] ?? ''),
-					'area' => (string)($row['AreaDescription'] ?? ''),
-				];
-			}
-		}
-		$this->jsonResponse($json);
+		$this->jsonResponse(['cities' => \Opencart\System\Library\NovaPoshta\Cache::searchCities($this->db, $query, $this->apiKey())]);
 	}
 
 	public function getWarehouses(): void {
-		$json = ['warehouses' => []];
 		$cityRef = trim((string)($this->request->post['city_ref'] ?? $this->request->get['city_ref'] ?? ''));
-		$key     = $this->apiKey();
-		if ($key === '' || $cityRef === '') {
-			$this->jsonResponse($json);
+		if ($cityRef === '') {
+			$this->jsonResponse(['warehouses' => []]);
 			return;
 		}
-		$client   = new \Opencart\System\Library\NovaPoshta\Client($key);
-		$response = $client->call('Address', 'getWarehouses', ['CityRef' => $cityRef, 'Limit' => '500']);
-		if (!empty($response['success']) && is_array($response['data'])) {
-			foreach ($response['data'] as $row) {
-				$json['warehouses'][] = [
-					'ref'        => (string)($row['Ref'] ?? ''),
-					'number'     => (string)($row['Number'] ?? ''),
-					'description'=> (string)($row['Description'] ?? ''),
-					'type_ref'   => (string)($row['TypeOfWarehouse'] ?? ''),
-				];
-			}
-		}
-		$this->jsonResponse($json);
+		$this->jsonResponse(['warehouses' => \Opencart\System\Library\NovaPoshta\Cache::getWarehouses($this->db, $cityRef, $this->apiKey())]);
 	}
 
 	public function setSelection(): void {
