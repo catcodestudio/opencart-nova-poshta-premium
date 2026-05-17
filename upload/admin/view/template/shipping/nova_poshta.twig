@@ -19,6 +19,7 @@
       <div class="card-header"><i class="fa-solid fa-pencil"></i> {{ text_edit }}</div>
       <div class="card-body">
         <form id="form-shipping" action="{{ save }}" method="post" data-oc-toggle="ajax">
+          <h5 class="text-muted mb-3"><i class="fa-solid fa-key"></i> {{ text_section_api }}</h5>
           <div class="row mb-3">
             <label for="input-api-key" class="col-sm-2 col-form-label">{{ entry_api_key }}</label>
             <div class="col-sm-10">
@@ -29,6 +30,41 @@
               <div id="test-result" class="form-text"></div>
             </div>
           </div>
+
+          <h5 class="text-muted mb-3 mt-4"><i class="fa-solid fa-warehouse"></i> {{ text_section_sender }}</h5>
+          <div class="row mb-3">
+            <label for="input-city-search" class="col-sm-2 col-form-label">{{ entry_sender_city }}</label>
+            <div class="col-sm-10">
+              <div class="input-group">
+                <input type="text" id="input-city-search" class="form-control" placeholder="{{ entry_sender_city }}" value="{{ shipping_nova_poshta_sender_city_name }}" autocomplete="off"/>
+                <button type="button" id="button-search-city" data-url="{{ search_cities }}" class="btn btn-outline-secondary"><i class="fa-solid fa-search"></i> {{ button_search }}</button>
+              </div>
+              <div id="city-results" class="list-group mt-2" style="display:none;"></div>
+              <input type="hidden" name="shipping_nova_poshta_sender_city_ref" id="input-sender-city-ref" value="{{ shipping_nova_poshta_sender_city_ref }}"/>
+              <input type="hidden" name="shipping_nova_poshta_sender_city_name" id="input-sender-city-name" value="{{ shipping_nova_poshta_sender_city_name }}"/>
+            </div>
+          </div>
+
+          <div class="row mb-3">
+            <label for="input-sender-warehouse" class="col-sm-2 col-form-label">{{ entry_sender_warehouse }}</label>
+            <div class="col-sm-10">
+              <select id="input-sender-warehouse" class="form-select" data-url="{{ get_warehouses }}" data-selected-ref="{{ shipping_nova_poshta_sender_warehouse_ref }}">
+                {% if shipping_nova_poshta_sender_warehouse_ref %}
+                  <option value="{{ shipping_nova_poshta_sender_warehouse_ref }}" selected>{{ shipping_nova_poshta_sender_warehouse_name }}</option>
+                {% else %}
+                  <option value="">— {{ text_pick_city }} —</option>
+                {% endif %}
+              </select>
+              <input type="hidden" name="shipping_nova_poshta_sender_warehouse_ref" id="input-sender-warehouse-ref" value="{{ shipping_nova_poshta_sender_warehouse_ref }}"/>
+              <input type="hidden" name="shipping_nova_poshta_sender_warehouse_name" id="input-sender-warehouse-name" value="{{ shipping_nova_poshta_sender_warehouse_name }}"/>
+              <div class="form-text">
+                <button type="button" id="button-quote" data-url="{{ quote_preview }}" class="btn btn-sm btn-outline-info mt-2"><i class="fa-solid fa-calculator"></i> {{ button_quote }}</button>
+                <span id="quote-result" class="ms-2"></span>
+              </div>
+            </div>
+          </div>
+
+          <h5 class="text-muted mb-3 mt-4"><i class="fa-solid fa-tag"></i> {{ text_section_pricing }}</h5>
           <div class="row mb-3">
             <label for="input-default-cost" class="col-sm-2 col-form-label">{{ entry_default_cost }}</label>
             <div class="col-sm-10">
@@ -78,32 +114,138 @@
   </div>
 </div>
 <script>
-document.getElementById('button-test').addEventListener('click', (e) => {
-  const btn = e.currentTarget;
-  const url = btn.dataset.testUrl;
-  const key = document.getElementById('input-api-key').value.trim();
-  const result = document.getElementById('test-result');
-  result.textContent = '...';
-  result.className = 'form-text text-muted';
-  fetch(url, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
-    body: new URLSearchParams({shipping_nova_poshta_api_key: key})
-  })
-  .then(r => r.json())
-  .then(d => {
-    if (d.success) {
-      result.textContent = d.success;
-      result.className = 'form-text text-success';
-    } else {
-      result.textContent = d.error || 'Unknown error';
-      result.className = 'form-text text-danger';
-    }
-  })
-  .catch(e => {
-    result.textContent = 'Request failed: ' + e.message;
-    result.className = 'form-text text-danger';
+(() => {
+  const setResult = (el, msg, cls) => {
+    el.textContent = msg;
+    el.className = 'form-text ' + cls;
+  };
+
+  // Test connection
+  const btnTest = document.getElementById('button-test');
+  btnTest.addEventListener('click', () => {
+    const url = btnTest.dataset.testUrl;
+    const key = document.getElementById('input-api-key').value.trim();
+    const result = document.getElementById('test-result');
+    setResult(result, '...', 'text-muted');
+    fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+      body: new URLSearchParams({shipping_nova_poshta_api_key: key})
+    })
+    .then(r => r.json())
+    .then(d => setResult(result, d.success || d.error || 'Unknown', d.success ? 'text-success' : 'text-danger'))
+    .catch(e => setResult(result, 'Request failed: ' + e.message, 'text-danger'));
   });
-});
+
+  // City search
+  const btnSearch = document.getElementById('button-search-city');
+  const cityInput = document.getElementById('input-city-search');
+  const cityResults = document.getElementById('city-results');
+  const hiddenCityRef = document.getElementById('input-sender-city-ref');
+  const hiddenCityName = document.getElementById('input-sender-city-name');
+  const whSelect = document.getElementById('input-sender-warehouse');
+  const hiddenWhRef = document.getElementById('input-sender-warehouse-ref');
+  const hiddenWhName = document.getElementById('input-sender-warehouse-name');
+
+  const loadWarehouses = (cityRef) => {
+    if (!cityRef) return;
+    const url = whSelect.dataset.url;
+    whSelect.innerHTML = '<option value="">…</option>';
+    fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+      body: new URLSearchParams({city_ref: cityRef})
+    })
+    .then(r => r.json())
+    .then(d => {
+      whSelect.innerHTML = '';
+      const blank = document.createElement('option');
+      blank.value = ''; blank.textContent = '—';
+      whSelect.appendChild(blank);
+      const selectedRef = whSelect.dataset.selectedRef || hiddenWhRef.value;
+      (d.warehouses || []).forEach(w => {
+        const opt = document.createElement('option');
+        opt.value = w.ref;
+        opt.textContent = w.description;
+        if (w.ref === selectedRef) opt.selected = true;
+        whSelect.appendChild(opt);
+      });
+    })
+    .catch(e => { whSelect.innerHTML = '<option value="">err: ' + e.message + '</option>'; });
+  };
+
+  btnSearch.addEventListener('click', () => {
+    const url = btnSearch.dataset.url;
+    const q = cityInput.value.trim();
+    cityResults.innerHTML = '';
+    cityResults.style.display = 'block';
+    fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+      body: new URLSearchParams({q: q})
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) {
+        cityResults.innerHTML = '<div class="list-group-item text-danger">' + d.error + '</div>';
+        return;
+      }
+      if (!d.cities || !d.cities.length) {
+        cityResults.innerHTML = '<div class="list-group-item text-muted">no results</div>';
+        return;
+      }
+      d.cities.forEach(c => {
+        const a = document.createElement('a');
+        a.href = '#';
+        a.className = 'list-group-item list-group-item-action';
+        a.textContent = c.name + (c.area ? ' (' + c.area + ')' : '');
+        a.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          hiddenCityRef.value = c.ref;
+          hiddenCityName.value = c.name;
+          cityInput.value = c.name;
+          cityResults.style.display = 'none';
+          whSelect.dataset.selectedRef = '';
+          hiddenWhRef.value = '';
+          hiddenWhName.value = '';
+          loadWarehouses(c.ref);
+        });
+        cityResults.appendChild(a);
+      });
+    })
+    .catch(e => { cityResults.innerHTML = '<div class="list-group-item text-danger">err: ' + e.message + '</div>'; });
+  });
+
+  cityInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); btnSearch.click(); } });
+
+  whSelect.addEventListener('change', () => {
+    hiddenWhRef.value = whSelect.value;
+    hiddenWhName.value = whSelect.options[whSelect.selectedIndex] ? whSelect.options[whSelect.selectedIndex].textContent : '';
+  });
+
+  // Auto-load warehouses on page load if city already selected
+  if (hiddenCityRef.value && !whSelect.options.length || (whSelect.options.length === 1 && !whSelect.options[0].value)) {
+    loadWarehouses(hiddenCityRef.value);
+  }
+
+  // Quote preview
+  const btnQuote = document.getElementById('button-quote');
+  const quoteResult = document.getElementById('quote-result');
+  btnQuote.addEventListener('click', () => {
+    const url = btnQuote.dataset.url;
+    quoteResult.textContent = '...';
+    quoteResult.className = 'ms-2 text-muted';
+    fetch(url, {
+      method: 'POST',
+      headers: {'X-Requested-With': 'XMLHttpRequest'},
+    })
+    .then(r => r.json())
+    .then(d => {
+      quoteResult.textContent = d.success || d.error || 'Unknown';
+      quoteResult.className = 'ms-2 ' + (d.success ? 'text-success' : 'text-danger');
+    })
+    .catch(e => { quoteResult.textContent = 'err: ' + e.message; quoteResult.className = 'ms-2 text-danger'; });
+  });
+})();
 </script>
 {{ footer }}
