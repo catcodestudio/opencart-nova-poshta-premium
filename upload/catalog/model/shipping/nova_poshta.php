@@ -1,6 +1,8 @@
 <?php
 namespace Opencart\Catalog\Model\Extension\NovaPoshtaPremium\Shipping;
 
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/client.php';
+
 class NovaPoshta extends \Opencart\System\Engine\Model {
 	public function getQuote(array $address): array {
 		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');

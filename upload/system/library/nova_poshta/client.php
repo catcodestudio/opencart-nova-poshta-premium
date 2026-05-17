@@ -31,7 +31,6 @@ class Client {
 		$raw  = curl_exec($ch);
 		$err  = curl_error($ch);
 		$http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-		curl_close($ch);
 
 		if ($raw === false) {
 			return ['success' => false, 'errors' => ['HTTP: ' . $err], 'http_code' => $http];

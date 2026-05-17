@@ -1,6 +1,8 @@
 <?php
 namespace Opencart\Admin\Controller\Extension\NovaPoshtaPremium\Shipping;
 
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/client.php';
+
 class NovaPoshta extends \Opencart\System\Engine\Controller {
 	public function index(): void {
 		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');
