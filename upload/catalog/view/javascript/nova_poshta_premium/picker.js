@@ -10,21 +10,21 @@
   wrap.id = 'np-picker';
   wrap.style.cssText = 'border:1px solid #d9534f;background:#fff8f5;border-radius:6px;padding:12px;margin:12px 0;font-family:Arial,sans-serif;';
   wrap.innerHTML = `
-    <div style="font-weight:bold;color:#d9534f;margin-bottom:6px;">Nova Poshta delivery</div>
+    <div style="font-weight:bold;color:#d9534f;margin-bottom:6px;">Доставка Новою Поштою</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
       <div style="flex:1;min-width:200px;">
-        <label style="display:block;font-size:12px;color:#555;">City</label>
+        <label style="display:block;font-size:12px;color:#555;">Місто</label>
         <div style="display:flex;gap:4px;">
-          <input id="np-city-q" type="text" placeholder="Type city..." style="flex:1;padding:6px;border:1px solid #ccc;border-radius:4px;"/>
-          <button id="np-city-search" type="button" style="padding:6px 10px;background:#d9534f;color:#fff;border:0;border-radius:4px;cursor:pointer;">Search</button>
+          <input id="np-city-q" type="text" placeholder="Введіть назву міста..." style="flex:1;padding:6px;border:1px solid #ccc;border-radius:4px;"/>
+          <button id="np-city-search" type="button" style="padding:6px 10px;background:#d9534f;color:#fff;border:0;border-radius:4px;cursor:pointer;">Знайти</button>
         </div>
         <div id="np-city-results" style="max-height:140px;overflow-y:auto;border:1px solid #eee;border-radius:4px;margin-top:4px;display:none;"></div>
         <div id="np-city-selected" style="font-size:12px;color:#2a7c2a;margin-top:4px;"></div>
       </div>
       <div style="flex:1;min-width:200px;">
-        <label style="display:block;font-size:12px;color:#555;">Warehouse</label>
+        <label style="display:block;font-size:12px;color:#555;">Відділення</label>
         <select id="np-warehouse" style="width:100%;padding:6px;border:1px solid #ccc;border-radius:4px;">
-          <option value="">— pick city first —</option>
+          <option value="">— оберіть місто —</option>
         </select>
         <div id="np-wh-selected" style="font-size:12px;color:#2a7c2a;margin-top:4px;"></div>
       </div>
