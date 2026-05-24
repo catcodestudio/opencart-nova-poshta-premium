@@ -3,6 +3,7 @@ namespace Opencart\Admin\Controller\Extension\NovaPoshtaPremium;
 
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/client.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/crypto.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/license.php';
 
 class Shipment extends \Opencart\System\Engine\Controller {
 	private function jsonResponse(array $data): void {
@@ -59,6 +60,13 @@ class Shipment extends \Opencart\System\Engine\Controller {
 
 	public function createReturn(): void {
 		$json = [];
+		// Pro feature: programmatic Return TTN creation via NP API.
+		// Free users can still issue returns by hand from the NP cabinet.
+		if (!\Opencart\System\Library\NovaPoshta\License::isPro($this->config)) {
+			$json['error'] = 'Return TTN is a Pro feature. Activate a license to use it.';
+			$this->jsonResponse($json);
+			return;
+		}
 		$shipmentId = (int)($this->request->get['shipment_id'] ?? 0);
 		$row = $this->db->query("SELECT int_doc_number FROM `" . DB_PREFIX . "np_shipment` WHERE shipment_id = " . $shipmentId)->row;
 		if (!$row || empty($row['int_doc_number'])) {
@@ -86,6 +94,12 @@ class Shipment extends \Opencart\System\Engine\Controller {
 
 	public function syncCod(): void {
 		$json = [];
+		// Pro feature: manual COD reconciliation trigger from admin UI.
+		if (!\Opencart\System\Library\NovaPoshta\License::isPro($this->config)) {
+			$json['error'] = 'COD sync is a Pro feature. Activate a license to use it.';
+			$this->jsonResponse($json);
+			return;
+		}
 		$key = $this->apiKey();
 		if ($key === '') {
 			$json['error'] = 'API key not configured';

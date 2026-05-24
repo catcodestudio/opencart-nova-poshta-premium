@@ -4,9 +4,15 @@ namespace Opencart\Catalog\Controller\Extension\NovaPoshtaPremium;
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/client.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/crypto.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/cache.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/license.php';
 
 class Cron extends \Opencart\System\Engine\Controller {
 	public function pollStatus(): void {
+		// Pro feature: automated status polling. Free users see whatever
+		// status was last manually refreshed from the shipments admin page.
+		if (!\Opencart\System\Library\NovaPoshta\License::isPro($this->config)) {
+			return;
+		}
 		$key = \Opencart\System\Library\NovaPoshta\Crypto::decrypt((string)$this->config->get('shipping_nova_poshta_api_key'));
 		if ($key === '') {
 			return;
@@ -53,6 +59,10 @@ class Cron extends \Opencart\System\Engine\Controller {
 	}
 
 	public function dispatchWebhooks(): void {
+		// Pro feature: outbound webhooks on shipment status changes.
+		if (!\Opencart\System\Library\NovaPoshta\License::isPro($this->config)) {
+			return;
+		}
 		$rows = $this->db->query("SELECT d.*, e.url, e.secret FROM `" . DB_PREFIX . "np_webhook_delivery` d INNER JOIN `" . DB_PREFIX . "np_webhook_endpoint` e ON e.endpoint_id = d.endpoint_id WHERE d.status = 'queued' AND d.next_retry_at <= NOW() AND d.attempt <= 4 LIMIT 50")->rows;
 		foreach ($rows as $r) {
 			$body = (string)$r['payload'];
@@ -86,10 +96,18 @@ class Cron extends \Opencart\System\Engine\Controller {
 		}
 	}
 
+	/**
+	 * Daily license re-verification. Refreshes status against the CatCode
+	 * server. Network failures are absorbed by the GRACE_DAYS window in
+	 * License::isPro(), so a transient outage doesn't disable Pro mid-day.
+	 */
 	public function licenseCheck(): void {
-		// STUB: dev mode skips remote verification. Production would POST
-		// to vendor license server and update shipping_nova_poshta_license_status.
-		// Intentionally a no-op when no key configured.
+		$key = (string)$this->config->get('shipping_nova_poshta_license_key');
+		if ($key === '') {
+			return;
+		}
+		$this->load->model('setting/setting');
+		\Opencart\System\Library\NovaPoshta\License::verify($this->config, $this->model_setting_setting);
 	}
 
 	public function syncCities(): void {
@@ -98,6 +116,11 @@ class Cron extends \Opencart\System\Engine\Controller {
 	}
 
 	public function syncCod(): void {
+		// Pro feature: COD payout reconciliation (BackwardDeliverySum +
+		// MoneyTransferNumber tracking against NP getDocumentList).
+		if (!\Opencart\System\Library\NovaPoshta\License::isPro($this->config)) {
+			return;
+		}
 		$key = \Opencart\System\Library\NovaPoshta\Crypto::decrypt((string)$this->config->get('shipping_nova_poshta_api_key'));
 		if ($key === '') return;
 		$client = new \Opencart\System\Library\NovaPoshta\Client($key);

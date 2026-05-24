@@ -1,7 +1,7 @@
 {
   "name": "Nova Poshta Premium",
   "description": "Premium Nova Poshta shipping integration for OpenCart 4.x — sender warehouse config, live rate quotes, storefront city/warehouse picker, shipment auto-create, status polling, outbound webhooks, encrypted API key.",
-  "version": "0.7.0",
+  "version": "1.1.0",
   "author": "CatCode",
   "link": "https://catcode.com.ua/opencart/nova-poshta-premium"
 }

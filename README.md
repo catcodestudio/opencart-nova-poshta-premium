@@ -1,10 +1,10 @@
 # Nova Poshta Premium for OpenCart 4.x
 
-Premium Nova Poshta shipping integration for OpenCart 4.x merchants.
+Nova Poshta shipping integration for OpenCart 4.x merchants. Free download with optional Pro license that unlocks premium automation.
 
-**Status:** v0.7 — full MVP feature set implemented. Pending: real license server, sender Counterparty configuration for full TTN auto-creation.
+**Status:** v1.1 — production. Real license server (CatCode), `product_slug` enforcement, all premium features properly gated.
 
-## Features
+## Free features (no license required)
 
 - OpenCart 4.x native (PSR-namespaced, Twig, events API)
 - Encrypted API key at rest (XOR + per-install secret derivation)
@@ -13,13 +13,23 @@ Premium Nova Poshta shipping integration for OpenCart 4.x merchants.
 - Live rate preview (real `InternetDocument.getDocumentPrice`)
 - **Storefront checkout picker** injected on `</body>` — customer chooses NP city + warehouse without leaving the checkout
 - Per-cart `getQuote()` calls NP API with cart weight + value
-- **Auto-shipment recording** on order create (event `addOrder/after`)
-- **Shipments dashboard** in admin (last 200 with status badges)
-- **Status polling cron** (hourly) — batch `TrackingDocument.getStatusDocuments`
-- **Outbound webhooks** on status change (HMAC-SHA256 signed, exponential backoff retry)
-- License key field with stub server verification (NPP-XXXX-XXXX-XXXX format)
+- Auto-shipment recording on order create (event `addOrder/after`)
+- Shipments dashboard in admin (last 200 with status badges)
+- Automatic TTN creation on order status reaching the configured trigger
+- City + warehouse cache with weekly background sync cron
 - uk-ua + en-gb language files
 - Setup / Re-install button reruns DB+events+cron registration idempotently
+
+## Pro features (require valid license)
+
+License key purchased separately from https://catcode.com.ua/opencart/nova-poshta-premium (€99 one-time + €39/yr).
+
+- **COD reconciliation** — auto-attach `BackwardDelivery` on cash-on-delivery orders; daily payout sync against NP `getDocumentList` (BackwardDeliverySum + MoneyTransferNumber tracked per shipment)
+- **Status polling cron** (hourly) — batch `TrackingDocument.getStatusDocuments` keeps shipment dashboard live
+- **Return TTN** — one-click return label via `AdditionalServiceGeneral.save` with refusal-of-delivery reason
+- **Outbound webhooks** — HMAC-SHA256 signed POST on status change, exponential backoff retry (5/10/20/40 min)
+- Multi-warehouse sender (configurable per geo-zone/category)
+- 14-day offline grace period — premium features keep working through transient license-server outages
 
 ## Compatibility
 

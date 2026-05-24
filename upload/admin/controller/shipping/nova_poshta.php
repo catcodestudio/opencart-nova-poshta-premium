@@ -451,6 +451,11 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		$this->jsonResponse($json);
 	}
 
+	/**
+	 * Activate or re-verify the license key against the CatCode server.
+	 * Called from the settings page when the merchant clicks
+	 * "Activate / Re-check License".
+	 */
 	public function licenseCheck(): void {
 		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');
 		$json = [];
@@ -461,18 +466,47 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			if ($key === '') {
 				$json['error'] = $this->language->get('error_license_empty');
 			} else {
-				// STUB: real implementation would POST to https://vendor.tld/api/v1/license/verify
-				// with {key, domain} and verify HMAC-signed response. For dev we accept any
-				// non-empty key matching the NPP-XXXX-XXXX-XXXX format.
-				$valid = (bool)preg_match('/^NPP(-[A-Z0-9]{4}){3}$/i', $key);
 				$this->load->model('setting/setting');
-				$current = $this->model_setting_setting->getSetting('shipping_nova_poshta');
-				$current['shipping_nova_poshta_license_key']        = $key;
-				$current['shipping_nova_poshta_license_status']     = $valid ? 'valid' : 'invalid';
-				$current['shipping_nova_poshta_license_checked_at'] = date('Y-m-d H:i:s');
-				$this->model_setting_setting->editSetting('shipping_nova_poshta', $current);
-				$json[$valid ? 'success' : 'error'] = $this->language->get($valid ? 'text_license_ok' : 'text_license_bad');
+				$storedKey = (string)$this->config->get('shipping_nova_poshta_license_key');
+				// If the user submitted the same key we already have, treat as
+				// re-verify (no extra activation slot). Otherwise this is a
+				// fresh activate (may consume a slot).
+				$result = ($storedKey !== '' && $storedKey === $key)
+					? \Opencart\System\Library\NovaPoshta\License::verify($this->config, $this->model_setting_setting)
+					: \Opencart\System\Library\NovaPoshta\License::activate($this->config, $this->model_setting_setting, $key);
+
+				if (!empty($result['ok'])) {
+					$tpl = $this->language->get('text_license_ok');
+					$json['success'] = sprintf($tpl, (string)($result['product_name'] ?? ''));
+				} else {
+					$err = (string)($result['error'] ?? 'unknown');
+					// Map server error codes to localized messages where we have them.
+					$key_for_msg = 'text_license_err_' . $err;
+					$msg = $this->language->get($key_for_msg);
+					if ($msg === $key_for_msg) {
+						$msg = $this->language->get('text_license_bad') . ' (' . $err . ')';
+					}
+					$json['error'] = $msg;
+				}
 			}
+		}
+		$this->jsonResponse($json);
+	}
+
+	/**
+	 * Release the activation slot on the server AND clear local cache.
+	 * Called when the merchant clicks "Deactivate License" — useful when
+	 * moving a key to a different domain.
+	 */
+	public function licenseDeactivate(): void {
+		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');
+		$json = [];
+		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
+			$json['error'] = $this->language->get('error_permission');
+		} else {
+			$this->load->model('setting/setting');
+			\Opencart\System\Library\NovaPoshta\License::deactivate($this->config, $this->model_setting_setting);
+			$json['success'] = $this->language->get('text_license_deactivated');
 		}
 		$this->jsonResponse($json);
 	}

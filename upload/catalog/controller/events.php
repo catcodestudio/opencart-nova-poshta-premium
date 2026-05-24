@@ -3,6 +3,7 @@ namespace Opencart\Catalog\Controller\Extension\NovaPoshtaPremium;
 
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/client.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/crypto.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/license.php';
 
 class Events extends \Opencart\System\Engine\Controller {
 	/**
@@ -114,9 +115,12 @@ class Events extends \Opencart\System\Engine\Controller {
 		if ($weight <= 0) $weight = 0.5;
 		if ($cost   <= 0) $cost   = (float)($order['total'] ?? 100);
 
-		// COD: if order pays cash on delivery, mirror it as BackwardDelivery.
-		// Heuristic: payment_code == 'cod' triggers it. Merchants without COD use NonCash payments.
-		$codAmount = ((string)($order['payment_code'] ?? '') === 'cod') ? $cost : 0.0;
+		// COD attachment is a Pro feature — without a valid license we still
+		// mint the TTN (core value), we just don't request cash-on-delivery
+		// from Nova Poshta. Merchant can convert manually in NP cabinet if
+		// they prefer that workflow without a license.
+		$isPro = \Opencart\System\Library\NovaPoshta\License::isPro($this->config);
+		$codAmount = ($isPro && (string)($order['payment_code'] ?? '') === 'cod') ? $cost : 0.0;
 		$client = new \Opencart\System\Library\NovaPoshta\Client($key);
 		$resp = $client->createTTN([
 			'sender_ref'             => $senderRef,
