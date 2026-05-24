@@ -31,7 +31,7 @@ URL: `https://www.opencart.com/index.php?route=account/extension/extension`
 7. **Image** = upload `screenshots/np-premium-marketplace-01-admin-settings.png` as the main thumbnail.
 8. **Screenshots** = upload all three from `screenshots/`. Order: settings → shipments → storefront.
 9. **Upload extension** = `build/nova-poshta-premium.ocmod.zip`.
-10. **Price** = €99 (or USD equivalent). Marketplace takes ~20%, so net is ~€79/sale on this channel.
+10. **Price** = $0 (Free listing). The plugin works without a license; premium features unlock with a key sold on catcode.com.ua. opencart.com is a brand / funnel channel, not a revenue channel for this plugin.
 11. **Demo URL** (optional) = if you set up a public OC store with the module installed, link it here. Otherwise leave empty — most premium extensions skip this.
 12. **Submit for review**. opencart.com manual review typically 3–10 business days.
 
@@ -53,7 +53,7 @@ Suggested page structure:
 - Hero — tagline from `sales-copy-en.md`
 - 3 screenshots from `screenshots/`
 - Feature comparison table
-- Pricing card (€99 one-time + €39/yr badge)
+- Pricing card (₴2 990 one-time + ₴990/yr badge)
 - Buy button → Lemon Squeezy / Paddle / Stripe Checkout
 - License key delivery via email on successful payment
 - Download link (signed S3/CDN URL, expires after 24h)
@@ -65,8 +65,8 @@ Race-to-bottom pricing, ~30% cut, premium positioning impossible.
 
 ## Pricing model details
 
-- **€99 one-time** — perpetual license for the version downloaded on purchase date.
-- **€39/yr maintenance** — unlocks all future updates + premium-tier feature access beyond the 14-day offline grace. TTN creation (core feature) keeps working forever even after maintenance lapses — we never brick a paying customer's checkout.
+- **₴2 990 one-time** — perpetual license for the version downloaded on purchase date. Premium features (COD, Returns, Status polling, Webhooks, Multi-warehouse) unlock immediately on activation.
+- **₴990/yr maintenance** — unlocks all future updates + premium-tier feature access beyond the 14-day offline grace. Free features (TTN creation, picker, basic tracking) keep working forever even without a license — we never brick a merchant's checkout.
 - **2 domains per key** — production + staging (or 2 brands). Customer can self-manage via license cabinet.
 - **30-day refund** — standard, opencart.com requires this anyway.
 

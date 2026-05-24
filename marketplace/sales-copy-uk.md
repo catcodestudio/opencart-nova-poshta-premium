@@ -54,6 +54,6 @@
 - НП Глобал (cross-border) — поки тільки domestic.
 
 ## Ліцензія + підтримка
-Proprietary. **€99 one-time + €39/yr maintenance** (renewal = майбутні апдейти + premium фічі після 14-денного offline grace period). Per-domain, 2 домени на ключ (dev + prod).
+Власницький. **₴2 990 одноразово + ₴990/рік підтримки** (поновлення = майбутні оновлення + Pro-фічі після 14-денного offline grace period). Ключ на 2 домени (dev + prod). Купити: https://catcode.com.ua/opencart/nova-poshta-premium
 
 Баги + feature requests через контактну форму на vendor сайті. SLA: 48h business-day response.
