@@ -22,7 +22,7 @@ Nova Poshta shipping integration for OpenCart 4.x merchants. Free download with 
 
 ## Pro features (require valid license)
 
-License key purchased separately from https://catcode.com.ua/opencart/nova-poshta-premium (₴2 990 one-time + ₴990/yr maintenance).
+License key purchased separately from https://catcode.com.ua/modules/opencart-nova-poshta-premium (₴2 990 one-time + ₴990/yr maintenance).
 
 - **COD reconciliation** — auto-attach `BackwardDelivery` on cash-on-delivery orders; daily payout sync against NP `getDocumentList` (BackwardDeliverySum + MoneyTransferNumber tracked per shipment)
 - **Status polling cron** (hourly) — batch `TrackingDocument.getStatusDocuments` keeps shipment dashboard live
@@ -43,7 +43,7 @@ Proprietary. ₴2 990 one-time + ₴990/yr maintenance, sold per-domain via vend
 
 ## Install (dev)
 
-1. Upload `build/nova-poshta-premium.ocmod.zip` via Admin → Extensions → Installer.
+1. Upload `build/nova_poshta_premium.ocmod.zip` via Admin → Extensions → Installer.
 2. Activate via Admin → Extensions → Extensions → Shipping → Install.
 3. Open the extension's Edit page and click **Setup / Re-install** — this creates DB tables and registers events + cron jobs.
 4. Paste NP API key, click **Test Connection**, save.
@@ -90,5 +90,5 @@ build.ps1                # Compress-Archive helper
 
 ```powershell
 .\build.ps1
-# Produces build/nova-poshta-premium.ocmod.zip ready for marketplace upload.
+# Produces build/nova_poshta_premium.ocmod.zip ready for marketplace upload.
 ```

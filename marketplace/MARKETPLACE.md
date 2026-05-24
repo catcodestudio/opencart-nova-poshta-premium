@@ -13,7 +13,7 @@ marketplace/
     └── np-premium-marketplace-03-storefront-picker.png ← In-checkout picker with Київ + Відділення №1 pre-selected
 ```
 
-The shipping zip lives at `../build/nova-poshta-premium.ocmod.zip` (rebuild via `..\build.ps1`).
+The shipping zip lives at `../build/nova_poshta_premium.ocmod.zip` (rebuild via `..\build.ps1`).
 
 ## Distribution channels
 
@@ -30,7 +30,7 @@ URL: `https://www.opencart.com/index.php?route=account/extension/extension`
 6. **Versions tested** = `4.0.2.0, 4.0.2.1, 4.0.2.2, 4.0.2.3, 4.1.0.0, 4.1.0.1, 4.1.0.2, 4.1.0.3` (compatibility list — pick from their dropdown).
 7. **Image** = upload `screenshots/np-premium-marketplace-01-admin-settings.png` as the main thumbnail.
 8. **Screenshots** = upload all three from `screenshots/`. Order: settings → shipments → storefront.
-9. **Upload extension** = `build/nova-poshta-premium.ocmod.zip`.
+9. **Upload extension** = `build/nova_poshta_premium.ocmod.zip`.
 10. **Price** = $0 (Free listing). The plugin works without a license; premium features unlock with a key sold on catcode.com.ua. opencart.com is a brand / funnel channel, not a revenue channel for this plugin.
 11. **Demo URL** (optional) = if you set up a public OC store with the module installed, link it here. Otherwise leave empty — most premium extensions skip this.
 12. **Submit for review**. opencart.com manual review typically 3–10 business days.
@@ -47,7 +47,7 @@ If review fails, fix the issue, bump `install.json` version, and re-submit. Use 
 
 ### 2. Vendor site (secondary, higher margin)
 
-Sell directly from `catcode.com.ua/opencart/nova-poshta-premium` (not yet built). Skip 20% marketplace cut.
+Sell directly from `catcode.com.ua/modules/opencart-nova-poshta-premium` (not yet built). Skip 20% marketplace cut.
 
 Suggested page structure:
 - Hero — tagline from `sales-copy-en.md`
@@ -72,7 +72,7 @@ Race-to-bottom pricing, ~30% cut, premium positioning impossible.
 
 ## Submission checklist
 
-- [ ] `build/nova-poshta-premium.ocmod.zip` rebuilt with latest commit
+- [ ] `build/nova_poshta_premium.ocmod.zip` rebuilt with latest commit
 - [ ] All 3 screenshots present and ≤2MB each (marketplace limit)
 - [ ] Sales copy proofed for typos
 - [ ] Demo URL working OR explicitly left blank

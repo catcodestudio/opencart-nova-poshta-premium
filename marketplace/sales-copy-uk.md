@@ -40,7 +40,7 @@
 - API ключ Нової Пошти (безкоштовний у `my.novaposhta.ua` → Налаштування → Безпека → API)
 
 ### Встановлення
-1. Адмінка → Extensions → Installer → завантажити `nova-poshta-premium.ocmod.zip`.
+1. Адмінка → Extensions → Installer → завантажити `nova_poshta_premium.ocmod.zip`.
 2. Адмінка → Extensions → Extensions → фільтр `Shipping` → Install **Nova Poshta Premium**.
 3. Відкрити Edit на розширенні, тиснути **Setup / Re-install** для створення таблиць + реєстрації events/crons.
 4. Вставити NP API ключ, **Test Connection**, зберегти.
@@ -54,6 +54,6 @@
 - НП Глобал (cross-border) — поки тільки domestic.
 
 ## Ліцензія + підтримка
-Власницький. **₴2 990 одноразово + ₴990/рік підтримки** (поновлення = майбутні оновлення + Pro-фічі після 14-денного offline grace period). Ключ на 2 домени (dev + prod). Купити: https://catcode.com.ua/opencart/nova-poshta-premium
+Власницький. **₴2 990 одноразово + ₴990/рік підтримки** (поновлення = майбутні оновлення + Pro-фічі після 14-денного offline grace period). Ключ на 2 домени (dev + prod). Купити: https://catcode.com.ua/modules/opencart-nova-poshta-premium
 
 Баги + feature requests через контактну форму на vendor сайті. SLA: 48h business-day response.

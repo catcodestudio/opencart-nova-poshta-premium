@@ -40,7 +40,7 @@ The first **OpenCart 4.x-native** Nova Poshta extension that does more than slap
 - Nova Poshta merchant API key (free from `my.novaposhta.ua` → Налаштування → Безпека → API)
 
 ### Installation
-1. Admin → Extensions → Installer → upload `nova-poshta-premium.ocmod.zip`.
+1. Admin → Extensions → Installer → upload `nova_poshta_premium.ocmod.zip`.
 2. Admin → Extensions → Extensions → filter `Shipping` → Install **Nova Poshta Premium**.
 3. Open the extension's Edit page, click **Setup / Re-install** to create DB tables + register events/crons.
 4. Paste your NP API key, click **Test Connection**, save.
@@ -54,6 +54,6 @@ The first **OpenCart 4.x-native** Nova Poshta extension that does more than slap
 - NP Global (cross-border) — domestic only.
 
 ## License & support
-Proprietary. ₴2 990 (~$72) one-time + ₴990/yr (~$24) maintenance (renewal unlocks future updates + premium features beyond 14-day offline grace). Sold per-domain, 2 domains per key (dev + prod). Buy at https://catcode.com.ua/opencart/nova-poshta-premium
+Proprietary. ₴2 990 (~$72) one-time + ₴990/yr (~$24) maintenance (renewal unlocks future updates + premium features beyond 14-day offline grace). Sold per-domain, 2 domains per key (dev + prod). Buy at https://catcode.com.ua/modules/opencart-nova-poshta-premium
 
 Bug reports + feature requests via the vendor site contact form. SLA: 48h business-day response.

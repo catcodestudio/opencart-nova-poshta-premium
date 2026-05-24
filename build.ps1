@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $upload = Join-Path $root 'upload'
 $build = Join-Path $root 'build'
-$zip = Join-Path $build 'nova-poshta-premium.ocmod.zip'
+$zip = Join-Path $build 'nova_poshta_premium.ocmod.zip'
 
 if (-not (Test-Path $upload)) { throw "upload/ not found at $upload" }
 if (-not (Test-Path $build)) { New-Item -ItemType Directory -Path $build | Out-Null }
