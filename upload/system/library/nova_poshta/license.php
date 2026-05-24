@@ -85,12 +85,31 @@ class License {
 		return $status;
 	}
 
-	/** Activate the current key against the server. */
+	/**
+	 * Activate the current key against the server.
+	 *
+	 * Two-step flow: verify first, then activate. verify() doesn't consume
+	 * an activation slot, so a customer who pastes a key meant for a
+	 * different CatCode product (or a typo) doesn't burn their limit.
+	 * Only after we confirm product_slug matches do we call the real
+	 * activate which records the site in the server's slot table.
+	 */
 	public static function activate($config, $modelSetting, string $key): array {
 		$key = trim($key);
 		if ($key === '') {
 			return ['ok' => false, 'error' => 'missing_key'];
 		}
+
+		// Pre-check: verify the key + product binding without consuming a
+		// server slot. If this fails (wrong product, unknown key, network) we
+		// do NOT touch the stored state — a previously activated valid key
+		// must survive a user typing in a bad one.
+		$pre = self::call($key, 'verify');
+		if (empty($pre['ok'])) {
+			return $pre;
+		}
+
+		// Slug already verified inside call(); safe to consume a slot now.
 		$result = self::call($key, 'activate');
 		self::store($modelSetting, $config, $key, $result);
 		return $result;
