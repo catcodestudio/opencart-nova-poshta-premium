@@ -53,7 +53,7 @@ Suggested page structure:
 - Hero — tagline from `sales-copy-en.md`
 - 3 screenshots from `screenshots/`
 - Feature comparison table
-- Pricing card (₴2 990 one-time + ₴990/yr badge)
+- Pricing card (₴2 990 lifetime badge)
 - Buy button → Lemon Squeezy / Paddle / Stripe Checkout
 - License key delivery via email on successful payment
 - Download link (signed S3/CDN URL, expires after 24h)
@@ -65,8 +65,8 @@ Race-to-bottom pricing, ~30% cut, premium positioning impossible.
 
 ## Pricing model details
 
-- **₴2 990 one-time** — perpetual license for the version downloaded on purchase date. Premium features (COD, Returns, Status polling, Webhooks, Multi-warehouse) unlock immediately on activation.
-- **₴990/yr maintenance** — unlocks all future updates + premium-tier feature access beyond the 14-day offline grace. Free features (TTN creation, picker, basic tracking) keep working forever even without a license — we never brick a merchant's checkout.
+- **₴2 990 one-time, lifetime** — perpetual license, no recurring fees. Premium features (COD, Returns, Status polling, Webhooks, Multi-warehouse) unlock immediately on activation and stay unlocked forever for the licensed domains. Updates for current OpenCart majors (4.x) are free for the lifetime of the license.
+- **Future major versions (v2.0+)** — when we ship a major release with substantially new value, existing customers get a discounted upgrade offer. No surprise paywalls on patch / minor releases.
 - **2 domains per key** — production + staging (or 2 brands). Customer can self-manage via license cabinet.
 - **30-day refund** — standard, opencart.com requires this anyway.
 
