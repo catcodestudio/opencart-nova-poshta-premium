@@ -188,6 +188,21 @@ class License {
 			$data['error'] = 'wrong_product';
 		}
 
+		// Map server-side flags to actionable error codes so the admin UI
+		// shows the right "what to do" message, not a generic "key invalid".
+		// Server's verify response sets `expired:true` / signals revoked via
+		// 401 + error=revoked, but for `verify` it leaves the error field
+		// blank when ok=false — we normalize here.
+		if (empty($data['ok']) && empty($data['error'])) {
+			if (!empty($data['expired'])) {
+				$data['error'] = 'expired';
+			} elseif ((int)($data['http'] ?? 0) === 401) {
+				$data['error'] = 'invalid_key';
+			} elseif ((int)($data['http'] ?? 0) === 403) {
+				$data['error'] = 'limit_reached';
+			}
+		}
+
 		return $data;
 	}
 
