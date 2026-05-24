@@ -54,6 +54,6 @@ The first **OpenCart 4.x-native** Nova Poshta extension that does more than slap
 - NP Global (cross-border) — domestic only.
 
 ## License & support
-Proprietary. ₴2 990 (~$72) one-time, lifetime — no recurring fees (renewal unlocks future updates + premium features beyond 14-day offline grace). Sold per-domain, 2 domains per key (dev + prod). Buy at https://catcode.com.ua/modules/opencart-nova-poshta-premium
+Proprietary. **₴2 990 (~$72) one-time, lifetime — no recurring fees.** Updates for the OpenCart 4.x line are included for the lifetime of the license. Sold per-domain, 2 domains per key (production + staging). Buy at https://catcode.com.ua/modules/opencart-nova-poshta-premium
 
 Bug reports + feature requests via the vendor site contact form. SLA: 48h business-day response.
