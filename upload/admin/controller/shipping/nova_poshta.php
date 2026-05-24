@@ -283,12 +283,24 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 
 		if (!$json) {
 			$post = $this->request->post;
-			// Encrypt API key at rest if it changed (plain incoming → store encrypted).
-			if (isset($post['shipping_nova_poshta_api_key']) && $post['shipping_nova_poshta_api_key'] !== '') {
+			// Encrypt API key at rest if user is changing it (non-empty incoming
+			// → store encrypted). An empty / missing api_key field means "don't
+			// touch what's already saved" — important because OC's editSetting()
+			// is replace-all and would wipe the stored key otherwise.
+			$this->load->model('setting/setting');
+			$current = $this->model_setting_setting->getSetting('shipping_nova_poshta');
+			if (!is_array($current)) { $current = []; }
+
+			if (!isset($post['shipping_nova_poshta_api_key']) || $post['shipping_nova_poshta_api_key'] === '') {
+				unset($post['shipping_nova_poshta_api_key']);
+			} else {
 				$post['shipping_nova_poshta_api_key'] = \Opencart\System\Library\NovaPoshta\Crypto::encrypt(trim($post['shipping_nova_poshta_api_key']));
 			}
-			$this->load->model('setting/setting');
-			$this->model_setting_setting->editSetting('shipping_nova_poshta', $post);
+
+			// Merge so unposted keys (api_key, license_*, sender_*, etc.) keep
+			// their current value instead of being wiped by replace-all.
+			$merged = array_merge($current, $post);
+			$this->model_setting_setting->editSetting('shipping_nova_poshta', $merged);
 			$json['success'] = $this->language->get('text_success');
 		}
 
