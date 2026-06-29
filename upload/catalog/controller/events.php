@@ -15,11 +15,27 @@ class Events extends \Opencart\System\Engine\Controller {
 			return;
 		}
 		$baseUrl = defined('HTTPS_SERVER') ? HTTPS_SERVER : HTTP_SERVER;
+		$accent = (string)($this->config->get('shipping_nova_poshta_accent_color') ?: '#da291c');
+		if (!preg_match('/^#[0-9a-fA-F]{6}$/', $accent)) {
+			$accent = '#da291c';
+		}
+		// Appearance controls so the merchant can match the widget to their theme.
+		$radius = (int)$this->config->get('shipping_nova_poshta_radius');
+		if ($radius < 0 || $radius > 28) {
+			$radius = 14;
+		}
+		$theme = (string)$this->config->get('shipping_nova_poshta_theme');
+		if (!in_array($theme, ['auto', 'light', 'dark'], true)) {
+			$theme = 'auto';
+		}
 		$endpoints = [
 			'searchCities'  => $baseUrl . 'index.php?route=extension/nova_poshta_premium/checkout.searchCities',
 			'getWarehouses' => $baseUrl . 'index.php?route=extension/nova_poshta_premium/checkout.getWarehouses',
 			'setSelection'  => $baseUrl . 'index.php?route=extension/nova_poshta_premium/checkout.setSelection',
 			'getSelection'  => $baseUrl . 'index.php?route=extension/nova_poshta_premium/checkout.getSelection',
+			'accentColor'   => $accent,
+			'radius'        => $radius,
+			'theme'         => $theme,
 		];
 		// JSON flags make it safe to drop directly into a <script> body without
 		// breaking out of the tag or being mangled by HTML entity encoding.
@@ -64,7 +80,7 @@ class Events extends \Opencart\System\Engine\Controller {
 			recipient_name = '" . $this->db->escape($cityName . ' / ' . $whName) . "',
 			service_type = 'WarehouseWarehouse',
 			status_code = 0,
-			status_text = 'Draft',
+			status_text = 'Чернетка',
 			created_at = NOW()");
 	}
 
@@ -93,7 +109,7 @@ class Events extends \Opencart\System\Engine\Controller {
 		$senderCityRef   = (string)$this->config->get('shipping_nova_poshta_sender_city_ref');
 		$senderWhRef     = (string)$this->config->get('shipping_nova_poshta_sender_warehouse_ref');
 		if ($senderRef === '' || $senderContact === '' || $senderPhone === '' || $senderCityRef === '' || $senderWhRef === '') {
-			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET status_text = 'Sender config incomplete', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
+			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET status_text = 'Не налаштовано відправника', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
 			return;
 		}
 
@@ -146,10 +162,10 @@ class Events extends \Opencart\System\Engine\Controller {
 		if (!empty($resp['success']) && !empty($resp['data'][0]['IntDocNumber'])) {
 			$intDoc = (string)$resp['data'][0]['IntDocNumber'];
 			$intRef = (string)($resp['data'][0]['Ref'] ?? '');
-			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET int_doc_number = '" . $this->db->escape($intDoc) . "', int_doc_ref = '" . $this->db->escape($intRef) . "', status_code = 1, status_text = 'Created', weight = " . (float)$weight . ", declared_cost = " . (float)$cost . ", cod_amount = " . (float)$codAmount . ", recipient_phone = '" . $this->db->escape((string)$order['telephone']) . "', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
+			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET int_doc_number = '" . $this->db->escape($intDoc) . "', int_doc_ref = '" . $this->db->escape($intRef) . "', status_code = 1, status_text = 'Створено', weight = " . (float)$weight . ", declared_cost = " . (float)$cost . ", cod_amount = " . (float)$codAmount . ", recipient_phone = '" . $this->db->escape((string)$order['telephone']) . "', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
 		} else {
 			$err = is_array($resp['errors'] ?? null) ? implode('; ', $resp['errors']) : 'unknown error';
-			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET status_text = '" . $this->db->escape(mb_substr('TTN error: ' . $err, 0, 250)) . "', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
+			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET status_text = '" . $this->db->escape(mb_substr('Помилка ТТН: ' . $err, 0, 250)) . "', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
 		}
 	}
 }

@@ -129,6 +129,39 @@
               <input type="text" name="shipping_nova_poshta_default_cost" value="{{ shipping_nova_poshta_default_cost }}" placeholder="0.00" id="input-default-cost" class="form-control"/>
             </div>
           </div>
+
+          <h5 class="text-muted mb-3 mt-4"><i class="fa-solid fa-palette"></i> {{ text_section_appearance }}</h5>
+          <div class="row mb-3">
+            <label for="input-accent-color" class="col-sm-2 col-form-label">{{ entry_accent_color }}</label>
+            <div class="col-sm-10">
+              <div class="input-group" style="max-width:240px;">
+                <input type="color" name="shipping_nova_poshta_accent_color" value="{{ shipping_nova_poshta_accent_color }}" id="input-accent-color" class="form-control form-control-color" oninput="document.getElementById('input-accent-color-hex').value=this.value"/>
+                <input type="text" value="{{ shipping_nova_poshta_accent_color }}" id="input-accent-color-hex" class="form-control" readonly/>
+              </div>
+              <div class="form-text">{{ help_accent_color }}</div>
+            </div>
+          </div>
+          <div class="row mb-3">
+            <label for="input-np-radius" class="col-sm-2 col-form-label">{{ entry_radius }}</label>
+            <div class="col-sm-10">
+              <div class="input-group" style="max-width:280px;">
+                <input type="range" min="0" max="28" step="1" name="shipping_nova_poshta_radius" value="{{ shipping_nova_poshta_radius }}" id="input-np-radius" class="form-range align-self-center me-3" style="flex:1;" oninput="document.getElementById('np-radius-val').textContent=this.value+'px'"/>
+                <span id="np-radius-val" class="badge bg-secondary align-self-center">{{ shipping_nova_poshta_radius }}px</span>
+              </div>
+              <div class="form-text">{{ help_radius }}</div>
+            </div>
+          </div>
+          <div class="row mb-3">
+            <label for="input-np-theme" class="col-sm-2 col-form-label">{{ entry_theme }}</label>
+            <div class="col-sm-10">
+              <select name="shipping_nova_poshta_theme" id="input-np-theme" class="form-select" style="max-width:280px;">
+                <option value="auto"{% if shipping_nova_poshta_theme == 'auto' %} selected{% endif %}>{{ text_theme_auto }}</option>
+                <option value="light"{% if shipping_nova_poshta_theme == 'light' %} selected{% endif %}>{{ text_theme_light }}</option>
+                <option value="dark"{% if shipping_nova_poshta_theme == 'dark' %} selected{% endif %}>{{ text_theme_dark }}</option>
+              </select>
+              <div class="form-text">{{ help_theme }}</div>
+            </div>
+          </div>
           <div class="row mb-3">
             <label for="input-tax-class" class="col-sm-2 col-form-label">{{ entry_tax_class }}</label>
             <div class="col-sm-10">
@@ -177,7 +210,7 @@
               </div>
               <div id="license-result" class="form-text">
                 {% if shipping_nova_poshta_license_status %}
-                  Current status: <strong>{{ shipping_nova_poshta_license_status }}</strong>
+                  {{ text_license_current_status }} <strong>{{ shipping_nova_poshta_license_status }}</strong>
                 {% endif %}
               </div>
             </div>

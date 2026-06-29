@@ -61,7 +61,6 @@ class NovaPoshta extends \Opencart\System\Engine\Model {
 		if (!isset($this->cart) || !is_object($this->cart)) {
 			return 1.0;
 		}
-		$this->load->model('localisation/weight_class');
 		// OC cart->getWeight() returns in store's default weight unit. For NP we need kg.
 		// Conservative default: assume KG unit if not detectable.
 		try {

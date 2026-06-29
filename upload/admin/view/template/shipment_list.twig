@@ -56,7 +56,7 @@
                     {% if s.money_transfer %}
                       <small class="text-success">→ {{ s.money_transfer }}</small>
                     {% else %}
-                      <small class="text-muted">awaiting payout</small>
+                      <small class="text-muted">{{ text_awaiting_payout }}</small>
                     {% endif %}
                   {% else %}
                     <span class="text-muted">—</span>
@@ -103,14 +103,14 @@
   }
   document.querySelectorAll('.button-return').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (!confirm('Create return TTN for this shipment?')) return;
+      if (!confirm('{{ text_confirm_return }}')) return;
       btn.disabled = true;
       post(btn.dataset.url).then(d => {
         if (d.success) {
           alert(d.success);
           location.reload();
         } else {
-          alert(d.error || 'failed');
+          alert(d.error || '{{ text_failed }}');
           btn.disabled = false;
         }
       });

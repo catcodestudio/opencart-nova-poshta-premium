@@ -65,22 +65,22 @@ class License {
 		$status    = (string)$config->get('shipping_nova_poshta_license_status');
 		$checkedAt = (string)$config->get('shipping_nova_poshta_license_checked_at');
 		if ($status === '') {
-			return 'not checked';
+			return 'не перевірено';
 		}
 		if ($status === 'valid') {
 			if ($checkedAt === '') {
-				return 'valid (never re-verified)';
+				return 'дійсна (ще не перевірялася повторно)';
 			}
 			$delta = (int)floor((time() - (int)strtotime($checkedAt)) / 86400);
 			$left  = self::GRACE_DAYS - $delta;
 			if ($left > 0) {
-				return 'valid (re-verified ' . $delta . ' day(s) ago, ' . $left . ' day(s) grace)';
+				return 'дійсна (перевірена ' . $delta . ' дн. тому, ще ' . $left . ' дн. пільгового періоду)';
 			}
-			return 'valid (grace expired — pending re-verification)';
+			return 'дійсна (пільговий період минув — очікує повторної перевірки)';
 		}
 		// invalid
 		if ($checkedAt !== '') {
-			return 'invalid (last checked ' . $checkedAt . ')';
+			return 'недійсна (остання перевірка ' . $checkedAt . ')';
 		}
 		return $status;
 	}

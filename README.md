@@ -2,7 +2,7 @@
 
 Nova Poshta shipping integration for OpenCart 4.x merchants. Free download with optional Pro license that unlocks premium automation.
 
-**Status:** v1.1 — production. Real license server (CatCode), `product_slug` enforcement, all premium features properly gated.
+**Status:** v1.2.1 — production. Real license server (CatCode), `product_slug` enforcement, all premium features properly gated. Checkout block appearance is themeable (accent colour, corner radius, light/dark/auto) and renders cleanly on the stock OpenCart `basic` theme.
 
 ## Free features (no license required)
 
@@ -17,6 +17,7 @@ Nova Poshta shipping integration for OpenCart 4.x merchants. Free download with 
 - Shipments dashboard in admin (last 200 with status badges)
 - Automatic TTN creation on order status reaching the configured trigger
 - City + warehouse cache with weekly background sync cron
+- **Themeable checkout block** — accent colour, corner radius (0–28px) and Light / Dark / Auto theme configurable in admin (Appearance section); `Auto` inherits the storefront's Bootstrap variables
 - uk-ua + en-gb language files
 - Setup / Re-install button reruns DB+events+cron registration idempotently
 
@@ -78,13 +79,22 @@ build/                   # zipped .ocmod.zip output (gitignored)
 build.ps1                # Compress-Archive helper
 ```
 
-## Deferred / known TODO
+## Changelog
 
-- **Sender Counterparty + Contact Person config** — required by NP `InternetDocument.save` to actually mint TTNs. Stubbed in `events.orderHistoryAdded` — status text marks it.
-- **Real license server** — `licenseCheck` accepts any well-formed `NPP-XXXX-XXXX-XXXX` for dev. Production needs HMAC-signed verify endpoint.
-- **City/warehouse caching** — currently every search/load hits NP live. Should mirror into `np_cities`/`np_warehouses` tables with weekly cron sync (table names reserved in schema PDF, not yet implemented).
-- **COD reconciliation dashboard** — table column exists, no UI yet.
-- **Return labels** — `AdditionalService.save` not wired.
+### 1.2.1
+- Verified clean rendering on the stock OpenCart 4.1.x `basic` theme (default appearance, `Auto` block theme).
+- Repository synced to the production codebase (git was previously lagging at 1.1.0 while 1.2.x shipped to the marketplace).
+- Docs reconciled with the implemented feature set.
+
+### 1.2.0
+- Themeable checkout block: configurable accent colour, corner radius (0–28px) and Light / Dark / Auto theme (admin → Appearance). `picker.js` is driven by `--np-*` CSS variables; `Auto` inherits the site's `--bs-*` palette.
+
+### 1.1.0
+- Real license server (CatCode) with `product_slug` enforcement and 14-day offline grace; all premium features properly gated.
+
+## Implemented since early dev
+
+Sender Counterparty + Contact Person config, HMAC-signed license verify, city/warehouse caching with weekly cron sync, COD reconciliation, and one-click return labels are all wired up (see Free / Pro feature lists above).
 
 ## Build
 

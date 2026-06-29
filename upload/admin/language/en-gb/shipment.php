@@ -13,3 +13,6 @@ $_['column_created']    = 'Created';
 $_['button_back']       = 'Back';
 $_['button_sync_cod']   = 'Sync COD payouts (last 90 days)';
 $_['button_return']     = 'Create return TTN';
+$_['text_awaiting_payout'] = 'awaiting payout';
+$_['text_confirm_return']  = 'Create return TTN for this shipment?';
+$_['text_failed']          = 'Operation failed';
