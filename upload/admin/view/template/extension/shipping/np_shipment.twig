@@ -1,0 +1,76 @@
+{{ header }}{{ column_left }}
+<div id="content">
+  <div class="page-header">
+    <div class="container-fluid">
+      <div class="pull-right">
+        <button type="button" id="np-sync" data-toggle="tooltip" title="{{ button_sync }}" class="btn btn-info"><i class="fa fa-refresh"></i> {{ button_sync }}</button>
+        <a href="{{ back }}" data-toggle="tooltip" title="{{ button_cancel }}" class="btn btn-default"><i class="fa fa-reply"></i></a>
+      </div>
+      <h1>{{ heading_title }}</h1>
+      <ul class="breadcrumb">
+        {% for breadcrumb in breadcrumbs %}
+        <li><a href="{{ breadcrumb.href }}">{{ breadcrumb.text }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="container-fluid">
+    <div id="np-alert"></div>
+    <div class="panel panel-default">
+      <div class="panel-heading"><h3 class="panel-title"><i class="fa fa-truck"></i> {{ heading_title }}</h3></div>
+      <div class="panel-body">
+        <div class="table-responsive">
+          <table class="table table-bordered table-hover">
+            <thead><tr>
+              <td class="text-left">{{ column_order }}</td>
+              <td class="text-left">{{ column_ttn }}</td>
+              <td class="text-left">{{ column_recipient }}</td>
+              <td class="text-left">{{ column_status }}</td>
+              <td class="text-right">{{ column_cod }}</td>
+              <td class="text-left">{{ column_created }}</td>
+              <td class="text-right">{{ column_action }}</td>
+            </tr></thead>
+            <tbody>
+              {% if shipments %}
+                {% for s in shipments %}
+                <tr>
+                  <td class="text-left"><a href="{{ s.order_url }}">#{{ s.order_id }}</a></td>
+                  <td class="text-left">{% if s.tracking_url %}<a href="{{ s.tracking_url }}" target="_blank">{{ s.int_doc_number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}
+                    {% if s.return_ttn %}<br/><small class="text-warning">↩ {{ s.return_ttn }}</small>{% endif %}</td>
+                  <td class="text-left">{{ s.recipient }}</td>
+                  <td class="text-left"><span class="label label-{% if s.status_code >= 9 %}success{% elseif s.status_code >= 1 %}info{% else %}default{% endif %}">{{ s.status_text }}</span></td>
+                  <td class="text-right">{% if s.cod_amount > 0 %}{{ s.cod_amount }}{% if s.money_transfer %} <small class="text-muted">({{ s.money_transfer }})</small>{% endif %}{% else %}—{% endif %}</td>
+                  <td class="text-left">{{ s.created_at }}</td>
+                  <td class="text-right">{% if s.int_doc_number and not s.return_ttn %}<button type="button" class="btn btn-xs btn-default np-return" data-url="{{ s.return_url }}">{{ button_return }}</button>{% endif %}</td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr><td colspan="7" class="text-center text-muted">{{ text_no_shipments }}</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script type="text/javascript">
+$(function () {
+  function alertBox(type, msg) {
+    $('#np-alert').html('<div class="alert alert-' + type + ' alert-dismissible"><i class="fa fa-info-circle"></i> ' + msg + ' <button type="button" class="close" data-dismiss="alert">&times;</button></div>');
+  }
+  function post(url, done) {
+    $.ajax({ url: url, type: 'post', dataType: 'json',
+      success: function (json) {
+        if (json.error) alertBox('danger', json.error);
+        else if (json.success) alertBox('success', json.success);
+        if (done) done(json);
+      },
+      error: function (xhr) { alertBox('danger', 'AJAX error: ' + xhr.statusText); }
+    });
+  }
+  $('#np-sync').on('click', function () { post('{{ sync_url|raw }}', function (j) { if (j.success) setTimeout(function(){ location.reload(); }, 1200); }); });
+  $('.np-return').on('click', function () { post($(this).data('url'), function (j) { if (j.success) setTimeout(function(){ location.reload(); }, 1200); }); });
+});
+</script>
+{{ footer }}

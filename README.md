@@ -1,3 +1,11 @@
+> ## ⚠️ OpenCart 3.0.x branch
+>
+> This **`opencart-3.x`** branch targets **OpenCart 3.0.2 – 3.0.5.0** (PHP 8.1+ for the current 3.0.5.0 build). It is a full port of the OpenCart 4.x extension (`main` branch): non-namespaced classes (prefixed `Np*` to avoid the core `Cache` clash), `/`-routed controller methods, OC3 event registration, Bootstrap-3 admin UI. Library files live under `upload/system/library/novaposhta/`. OpenCart 3 has no built-in cron manager — the cron URLs are listed on the admin **Cron** tab for the system crontab.
+>
+> **Install:** Extensions → Installer → upload `nova_poshta_premium.ocmod.zip` → Extensions → Shipping → install **Nova Poshta Premium** → Edit → Setup, paste API key, configure sender. The in-checkout city/warehouse picker mounts inside the delivery step.
+>
+> For OpenCart 4.x use the `main` branch.
+
 # Nova Poshta Premium for OpenCart 4.x
 
 Nova Poshta shipping integration for OpenCart 4.x merchants. Free download with optional Pro license that unlocks premium automation.

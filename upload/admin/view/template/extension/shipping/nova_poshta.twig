@@ -1,0 +1,293 @@
+{{ header }}{{ column_left }}
+<div id="content">
+  <div class="page-header">
+    <div class="container-fluid">
+      <div class="pull-right">
+        <button type="button" id="np-save" data-toggle="tooltip" title="{{ button_save }}" class="btn btn-primary"><i class="fa fa-save"></i></button>
+        <a href="{{ shipments_url }}" data-toggle="tooltip" title="{{ button_shipments }}" class="btn btn-info"><i class="fa fa-truck"></i></a>
+        <a href="{{ back }}" data-toggle="tooltip" title="{{ button_cancel }}" class="btn btn-default"><i class="fa fa-reply"></i></a>
+      </div>
+      <h1>{{ heading_title }}</h1>
+      <ul class="breadcrumb">
+        {% for breadcrumb in breadcrumbs %}
+        <li><a href="{{ breadcrumb.href }}">{{ breadcrumb.text }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="container-fluid">
+    <div id="np-alert"></div>
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h3 class="panel-title"><i class="fa fa-pencil"></i> {{ text_edit }}
+          {% if shipping_nova_poshta_license_is_pro %}<span class="label label-success">PRO</span>{% else %}<span class="label label-default">FREE</span>{% endif %}
+        </h3>
+      </div>
+      <div class="panel-body">
+        <ul class="nav nav-tabs">
+          <li class="active"><a href="#tab-general" data-toggle="tab">{{ tab_general }}</a></li>
+          <li><a href="#tab-sender" data-toggle="tab">{{ tab_sender }}</a></li>
+          <li><a href="#tab-auto" data-toggle="tab">{{ tab_auto }}</a></li>
+          <li><a href="#tab-appearance" data-toggle="tab">{{ tab_appearance }}</a></li>
+          <li><a href="#tab-license" data-toggle="tab">{{ tab_license }}</a></li>
+          <li><a href="#tab-cron" data-toggle="tab">{{ tab_cron }}</a></li>
+        </ul>
+        <form id="form-shipping" class="form-horizontal">
+          <div class="tab-content">
+
+            <!-- GENERAL -->
+            <div class="tab-pane active" id="tab-general">
+              <div class="form-group">
+                <label class="col-sm-2 control-label">{{ entry_status }}</label>
+                <div class="col-sm-10"><select name="shipping_nova_poshta_status" class="form-control">
+                  <option value="1"{% if shipping_nova_poshta_status %} selected{% endif %}>{{ text_enabled }}</option>
+                  <option value="0"{% if not shipping_nova_poshta_status %} selected{% endif %}>{{ text_disabled }}</option>
+                </select></div>
+              </div>
+              <div class="form-group">
+                <label class="col-sm-2 control-label"><span data-toggle="tooltip" title="{{ help_api_key }}">{{ entry_api_key }}</span></label>
+                <div class="col-sm-10">
+                  <div class="input-group">
+                    <input type="text" name="shipping_nova_poshta_api_key" value="{{ shipping_nova_poshta_api_key }}" id="input-api-key" class="form-control" autocomplete="off"/>
+                    <span class="input-group-btn"><button type="button" id="np-test" class="btn btn-default"><i class="fa fa-plug"></i> {{ button_test }}</button></span>
+                  </div>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="col-sm-2 control-label"><span data-toggle="tooltip" title="{{ help_default_cost }}">{{ entry_default_cost }}</span></label>
+                <div class="col-sm-10"><input type="text" name="shipping_nova_poshta_default_cost" value="{{ shipping_nova_poshta_default_cost }}" class="form-control"/></div>
+              </div>
+              <div class="form-group">
+                <label class="col-sm-2 control-label">{{ entry_geo_zone }}</label>
+                <div class="col-sm-10"><select name="shipping_nova_poshta_geo_zone_id" class="form-control">
+                  <option value="0">{{ text_none }}</option>
+                  {% for geo_zone in geo_zones %}
+                  <option value="{{ geo_zone.geo_zone_id }}"{% if geo_zone.geo_zone_id == shipping_nova_poshta_geo_zone_id %} selected{% endif %}>{{ geo_zone.name }}</option>
+                  {% endfor %}
+                </select></div>
+              </div>
+              <div class="form-group">
+                <label class="col-sm-2 control-label">{{ entry_tax_class }}</label>
+                <div class="col-sm-10"><select name="shipping_nova_poshta_tax_class_id" class="form-control">
+                  <option value="0">{{ text_none }}</option>
+                  {% for tax_class in tax_classes %}
+                  <option value="{{ tax_class.tax_class_id }}"{% if tax_class.tax_class_id == shipping_nova_poshta_tax_class_id %} selected{% endif %}>{{ tax_class.title }}</option>
+                  {% endfor %}
+                </select></div>
+              </div>
+              <div class="form-group">
+                <label class="col-sm-2 control-label">{{ entry_sort_order }}</label>
+                <div class="col-sm-10"><input type="text" name="shipping_nova_poshta_sort_order" value="{{ shipping_nova_poshta_sort_order }}" class="form-control" style="max-width:120px"/></div>
+              </div>
+              <div class="form-group">
+                <div class="col-sm-offset-2 col-sm-10">
+                  <button type="button" id="np-quote" class="btn btn-default"><i class="fa fa-calculator"></i> {{ button_quote }}</button>
+                  <button type="button" id="np-setup" class="btn btn-warning"><i class="fa fa-wrench"></i> {{ button_setup }}</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- SENDER -->
+            <div class="tab-pane" id="tab-sender">
+              <p class="text-muted">{{ help_sender }}</p>
+              <input type="hidden" name="shipping_nova_poshta_sender_city_ref" id="np-city-ref" value="{{ shipping_nova_poshta_sender_city_ref }}"/>
+              <input type="hidden" name="shipping_nova_poshta_sender_city_name" id="np-city-name" value="{{ shipping_nova_poshta_sender_city_name }}"/>
+              <input type="hidden" name="shipping_nova_poshta_sender_warehouse_name" id="np-wh-name" value="{{ shipping_nova_poshta_sender_warehouse_name }}"/>
+              <input type="hidden" name="shipping_nova_poshta_sender_counterparty_name" id="np-cp-name" value="{{ shipping_nova_poshta_sender_counterparty_name }}"/>
+              <input type="hidden" name="shipping_nova_poshta_sender_contact_name" id="np-contact-name" value="{{ shipping_nova_poshta_sender_contact_name }}"/>
+              <div class="form-group">
+                <label class="col-sm-2 control-label">{{ entry_sender_city }}</label>
+                <div class="col-sm-10" style="position:relative">
+                  <input type="text" id="np-city-input" class="form-control" autocomplete="off" value="{{ shipping_nova_poshta_sender_city_name }}" placeholder="Київ…"/>
+                  <ul id="np-city-list" class="dropdown-menu" style="width:96%"></ul>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="col-sm-2 control-label">{{ entry_sender_warehouse }}</label>
+                <div class="col-sm-10"><select name="shipping_nova_poshta_sender_warehouse_ref" id="np-wh" class="form-control">
+                  {% if shipping_nova_poshta_sender_warehouse_ref %}<option value="{{ shipping_nova_poshta_sender_warehouse_ref }}" selected>{{ shipping_nova_poshta_sender_warehouse_name }}</option>{% endif %}
+                </select></div>
+              </div>
+              <div class="form-group">
+                <label class="col-sm-2 control-label">{{ entry_sender_counterparty }}</label>
+                <div class="col-sm-10">
+                  <div class="input-group">
+                    <select name="shipping_nova_poshta_sender_counterparty_ref" id="np-cp" class="form-control">
+                      {% if shipping_nova_poshta_sender_counterparty_ref %}<option value="{{ shipping_nova_poshta_sender_counterparty_ref }}" selected>{{ shipping_nova_poshta_sender_counterparty_name }}</option>{% endif %}
+                    </select>
+                    <span class="input-group-btn"><button type="button" id="np-cp-load" class="btn btn-default">{{ button_load_contacts }}</button></span>
+                  </div>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="col-sm-2 control-label">{{ entry_sender_contact }}</label>
+                <div class="col-sm-10"><select name="shipping_nova_poshta_sender_contact_ref" id="np-contact" class="form-control">
+                  {% if shipping_nova_poshta_sender_contact_ref %}<option value="{{ shipping_nova_poshta_sender_contact_ref }}" selected>{{ shipping_nova_poshta_sender_contact_name }}</option>{% endif %}
+                </select></div>
+              </div>
+              <div class="form-group">
+                <label class="col-sm-2 control-label">{{ entry_sender_phone }}</label>
+                <div class="col-sm-10"><input type="text" name="shipping_nova_poshta_sender_phone" value="{{ shipping_nova_poshta_sender_phone }}" class="form-control" placeholder="380xxxxxxxxx"/></div>
+              </div>
+            </div>
+
+            <!-- AUTO -->
+            <div class="tab-pane" id="tab-auto">
+              <div class="form-group">
+                <label class="col-sm-2 control-label"><span data-toggle="tooltip" title="{{ help_auto_ttn }}">{{ entry_auto_ttn }}</span></label>
+                <div class="col-sm-10"><select name="shipping_nova_poshta_auto_ttn_status_id" class="form-control">
+                  <option value="0">{{ text_none }}</option>
+                  {% for order_status in order_statuses %}
+                  <option value="{{ order_status.order_status_id }}"{% if order_status.order_status_id == shipping_nova_poshta_auto_ttn_status_id %} selected{% endif %}>{{ order_status.name }}</option>
+                  {% endfor %}
+                </select></div>
+              </div>
+            </div>
+
+            <!-- APPEARANCE -->
+            <div class="tab-pane" id="tab-appearance">
+              <div class="form-group">
+                <label class="col-sm-2 control-label"><span data-toggle="tooltip" title="{{ help_accent_color }}">{{ entry_accent_color }}</span></label>
+                <div class="col-sm-10"><input type="color" name="shipping_nova_poshta_accent_color" value="{{ shipping_nova_poshta_accent_color }}" class="form-control" style="max-width:120px;padding:4px"/></div>
+              </div>
+              <div class="form-group">
+                <label class="col-sm-2 control-label"><span data-toggle="tooltip" title="{{ help_radius }}">{{ entry_radius }}</span></label>
+                <div class="col-sm-10">
+                  <input type="range" name="shipping_nova_poshta_radius" id="np-radius" min="0" max="28" value="{{ shipping_nova_poshta_radius }}" style="max-width:300px;display:inline-block;vertical-align:middle"/>
+                  <span id="np-radius-val" class="label label-default">{{ shipping_nova_poshta_radius }}px</span>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="col-sm-2 control-label"><span data-toggle="tooltip" title="{{ help_theme }}">{{ entry_theme }}</span></label>
+                <div class="col-sm-10"><select name="shipping_nova_poshta_theme" class="form-control" style="max-width:240px">
+                  <option value="auto"{% if shipping_nova_poshta_theme == 'auto' %} selected{% endif %}>{{ text_theme_auto }}</option>
+                  <option value="light"{% if shipping_nova_poshta_theme == 'light' %} selected{% endif %}>{{ text_theme_light }}</option>
+                  <option value="dark"{% if shipping_nova_poshta_theme == 'dark' %} selected{% endif %}>{{ text_theme_dark }}</option>
+                </select></div>
+              </div>
+            </div>
+
+            <!-- LICENSE -->
+            <div class="tab-pane" id="tab-license">
+              <p class="text-muted">{{ help_license }}</p>
+              <div class="form-group">
+                <label class="col-sm-2 control-label">{{ entry_license_key }}</label>
+                <div class="col-sm-10"><input type="text" name="shipping_nova_poshta_license_key" id="np-license-key" value="{{ shipping_nova_poshta_license_key }}" class="form-control" placeholder="NPP-XXXX-XXXX-XXXX"/></div>
+              </div>
+              <div class="form-group">
+                <label class="col-sm-2 control-label">{{ entry_license_status }}</label>
+                <div class="col-sm-10"><p class="form-control-static">{{ shipping_nova_poshta_license_status }}</p></div>
+              </div>
+              <div class="form-group">
+                <div class="col-sm-offset-2 col-sm-10">
+                  <button type="button" id="np-license-on" class="btn btn-success"><i class="fa fa-key"></i> {{ button_license_activate }}</button>
+                  <button type="button" id="np-license-off" class="btn btn-default">{{ button_license_off }}</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- CRON -->
+            <div class="tab-pane" id="tab-cron">
+              <p class="text-muted">{{ help_cron }}</p>
+              {% for u in [cron_poll, cron_webhook, cron_license, cron_cities, cron_cod] %}
+              <div class="form-group"><div class="col-sm-12"><input type="text" class="form-control" readonly value="{{ u }}"/></div></div>
+              {% endfor %}
+            </div>
+
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<script type="text/javascript">
+$(function () {
+  function alertBox(type, msg) {
+    $('#np-alert').html('<div class="alert alert-' + type + ' alert-dismissible"><i class="fa fa-info-circle"></i> ' + msg + ' <button type="button" class="close" data-dismiss="alert">&times;</button></div>');
+  }
+  function post(url, data, done) {
+    $.ajax({ url: url, type: 'post', data: data, dataType: 'json',
+      success: function (json) {
+        if (json.error) { alertBox('danger', json.error); }
+        else if (json.success) { alertBox('success', json.success); }
+        if (done) done(json);
+      },
+      error: function (xhr) { alertBox('danger', 'AJAX error: ' + xhr.statusText); }
+    });
+  }
+
+  $('#np-save').on('click', function () { post('{{ save|raw }}', $('#form-shipping').serialize()); });
+  $('#np-test').on('click', function () { post('{{ test|raw }}', { shipping_nova_poshta_api_key: $('#input-api-key').val() }); });
+  $('#np-quote').on('click', function () { post('{{ quote_preview|raw }}', {}); });
+  $('#np-setup').on('click', function () { post('{{ setup_url|raw }}', {}); });
+
+  // radius display
+  $('#np-radius').on('input change', function () { $('#np-radius-val').text($(this).val() + 'px'); });
+
+  // city autocomplete
+  var t = null;
+  $('#np-city-input').on('keyup', function () {
+    var q = $(this).val();
+    clearTimeout(t);
+    if (q.length < 2) { $('#np-city-list').hide(); return; }
+    t = setTimeout(function () {
+      $.ajax({ url: '{{ search_cities|raw }}', type: 'post', data: { q: q }, dataType: 'json', success: function (json) {
+        var html = '';
+        (json.cities || []).forEach(function (c) {
+          html += '<li><a href="#" data-ref="' + c.ref + '" data-name="' + $('<i>').text(c.name).html() + '">' + $('<i>').text(c.name).html() + ' <small class="text-muted">' + $('<i>').text(c.area || '').html() + '</small></a></li>';
+        });
+        $('#np-city-list').html(html).toggle(html !== '');
+      }});
+    }, 300);
+  });
+  $('#np-city-list').on('click', 'a', function (e) {
+    e.preventDefault();
+    var ref = $(this).data('ref'), name = $(this).data('name');
+    $('#np-city-ref').val(ref); $('#np-city-name').val(name); $('#np-city-input').val(name);
+    $('#np-city-list').hide();
+    loadWarehouses(ref);
+  });
+  function loadWarehouses(ref) {
+    $.ajax({ url: '{{ get_warehouses|raw }}', type: 'post', data: { city_ref: ref }, dataType: 'json', success: function (json) {
+      var html = '';
+      (json.warehouses || []).forEach(function (w) {
+        html += '<option value="' + w.ref + '">' + $('<i>').text(w.description).html() + '</option>';
+      });
+      $('#np-wh').html(html);
+      $('#np-wh-name').val($('#np-wh option:selected').text());
+    }});
+  }
+  $('#np-wh').on('change', function () { $('#np-wh-name').val($('#np-wh option:selected').text()); });
+
+  // counterparties + contacts
+  $('#np-cp-load').on('click', function () {
+    post('{{ url_counterparties|raw }}', {}, function (json) {
+      var html = '';
+      (json.counterparties || []).forEach(function (c) {
+        html += '<option value="' + c.ref + '">' + $('<i>').text(c.name).html() + '</option>';
+      });
+      if (html) { $('#np-cp').html(html); $('#np-cp-name').val($('#np-cp option:selected').text()); loadContacts($('#np-cp').val()); }
+    });
+  });
+  $('#np-cp').on('change', function () { $('#np-cp-name').val($('#np-cp option:selected').text()); loadContacts($(this).val()); });
+  function loadContacts(cpRef) {
+    if (!cpRef) return;
+    $.ajax({ url: '{{ url_contacts|raw }}', type: 'post', data: { counterparty_ref: cpRef }, dataType: 'json', success: function (json) {
+      var html = '';
+      (json.contacts || []).forEach(function (c) {
+        html += '<option value="' + c.ref + '" data-phone="' + (c.phone || '') + '">' + $('<i>').text(c.name).html() + '</option>';
+      });
+      $('#np-contact').html(html);
+      $('#np-contact-name').val($('#np-contact option:selected').text());
+      var ph = $('#np-contact option:selected').data('phone');
+      if (ph && !$('[name="shipping_nova_poshta_sender_phone"]').val()) { $('[name="shipping_nova_poshta_sender_phone"]').val(ph); }
+    }});
+  }
+  $('#np-contact').on('change', function () { $('#np-contact-name').val($('#np-contact option:selected').text()); });
+
+  // license
+  $('#np-license-on').on('click', function () { post('{{ url_license_check|raw }}', { shipping_nova_poshta_license_key: $('#np-license-key').val() }); });
+  $('#np-license-off').on('click', function () { post('{{ url_license_off|raw }}', {}); });
+});
+</script>
+{{ footer }}
