@@ -20,8 +20,15 @@ class Cache {
 	}
 
 	public static function searchCities($db, string $query, string $apiKey): array {
-		$q = $db->escape(self::lower($query));
-		$rows = $db->query("SELECT ref, description, area_description FROM `" . DB_PREFIX . "np_cities` WHERE LOWER(description) LIKE '" . $q . "%' OR LOWER(description) LIKE '%" . $q . "%' ORDER BY (LOWER(description) = '" . $q . "') DESC, CHAR_LENGTH(description) ASC LIMIT 20")->rows;
+		// Every escape() result must sit inside its own quotes with nothing else:
+		// on the PDO driver escape() returns a bound placeholder (":0"), so
+		// appending a wildcard inside the quotes ("LIKE ':0%'") breaks the SQL.
+		// Wildcards therefore go through escape() as part of the value.
+		$lower  = self::lower($query);
+		$prefix = $db->escape($lower . '%');
+		$any    = $db->escape('%' . $lower . '%');
+		$exact  = $db->escape($lower);
+		$rows = $db->query("SELECT ref, description, area_description FROM `" . DB_PREFIX . "np_cities` WHERE LOWER(description) LIKE '" . $prefix . "' OR LOWER(description) LIKE '" . $any . "' ORDER BY (LOWER(description) = '" . $exact . "') DESC, CHAR_LENGTH(description) ASC LIMIT 20")->rows;
 		if ($rows) {
 			return array_map(fn($r) => ['ref' => (string)$r['ref'], 'name' => (string)$r['description'], 'area' => (string)$r['area_description']], $rows);
 		}

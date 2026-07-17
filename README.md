@@ -81,6 +81,9 @@ build.ps1                # Compress-Archive helper
 
 ## Changelog
 
+### 1.2.4
+- Fixed: city search failed with an SQL syntax error on stores running the **PDO** database driver (`DB_DRIVER = pdo`). On that driver OpenCart's `escape()` returns a bound placeholder rather than an escaped string, so appending a `%` wildcard inside the quotes produced `LIKE :0%`. Wildcards now go through `escape()` as part of the value, which is correct on both `mysqli` and `pdo`. Warehouse lookup was unaffected, which is why the failure looked like an API key problem.
+
 ### 1.2.3
 - Fixed: city search returned "nothing found" on hosts without the PHP `mbstring` extension. `mb_strtolower` / `mb_substr` are now called only when available, with UTF-8 safe fallbacks — warehouse lookup was unaffected, which made the failure look like an API key problem.
 
