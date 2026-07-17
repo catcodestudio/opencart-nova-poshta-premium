@@ -9,8 +9,17 @@ require_once __DIR__ . '/client.php';
 class NpCache {
 	private const WAREHOUSE_TTL_DAYS = 7;
 
+	/**
+	 * mbstring is not guaranteed on shared hosting. The ASCII fallback leaves
+	 * Cyrillic case untouched, which is harmless: the LIKE below runs against a
+	 * case-insensitive collation, and a miss just falls through to the live API.
+	 */
+	private static function lower(string $s): string {
+		return function_exists('mb_strtolower') ? mb_strtolower($s) : strtolower($s);
+	}
+
 	public static function searchCities($db, string $query, string $apiKey): array {
-		$q = $db->escape(mb_strtolower($query));
+		$q = $db->escape(self::lower($query));
 		$rows = $db->query("SELECT ref, description, area_description FROM `" . DB_PREFIX . "np_cities` WHERE LOWER(description) LIKE '" . $q . "%' OR LOWER(description) LIKE '%" . $q . "%' ORDER BY (LOWER(description) = '" . $q . "') DESC, CHAR_LENGTH(description) ASC LIMIT 20")->rows;
 		if ($rows) {
 			return array_map(fn($r) => ['ref' => (string)$r['ref'], 'name' => (string)$r['description'], 'area' => (string)$r['area_description']], $rows);

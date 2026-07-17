@@ -10,6 +10,14 @@ require_once DIR_SYSTEM . 'library/novaposhta/license.php';
  * and cron endpoints (status poll, webhooks, license, city/COD sync).
  */
 class ControllerExtensionShippingNovaPoshta extends Controller {
+	/** UTF-8 safe truncate that survives hosts without mbstring. */
+	private static function cut($s, $len) {
+		if (function_exists('mb_substr')) {
+			return mb_substr($s, 0, $len);
+		}
+		return preg_match('/^.{0,' . $len . '}/us', $s, $m) ? $m[0] : substr($s, 0, $len);
+	}
+
 	private function jsonResponse($data) {
 		if (ob_get_level() > 0) {
 			ob_clean();
@@ -192,7 +200,7 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 			'weight'                  => $weight,
 			'cost'                    => $cost,
 			'cod_amount'              => $codAmount,
-			'description'             => mb_substr(implode(', ', $descParts) ?: ('Order #' . $order_id), 0, 200),
+			'description'             => self::cut(implode(', ', $descParts) ?: ('Order #' . $order_id), 200),
 			'service_type'            => 'WarehouseWarehouse',
 			'payer_type'              => 'Recipient',
 			'payment_method'          => 'Cash',
@@ -206,7 +214,7 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET int_doc_number = '" . $this->db->escape($intDoc) . "', int_doc_ref = '" . $this->db->escape($intRef) . "', status_code = 1, status_text = 'Створено', weight = " . (float)$weight . ", declared_cost = " . (float)$cost . ", cod_amount = " . (float)$codAmount . ", recipient_phone = '" . $this->db->escape((string)$order['telephone']) . "', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
 		} else {
 			$err = is_array(isset($resp['errors']) ? $resp['errors'] : null) ? implode('; ', $resp['errors']) : 'unknown error';
-			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET status_text = '" . $this->db->escape(mb_substr('Помилка ТТН: ' . $err, 0, 250)) . "', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
+			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET status_text = '" . $this->db->escape(self::cut('Помилка ТТН: ' . $err, 250)) . "', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
 		}
 	}
 
