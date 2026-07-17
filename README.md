@@ -81,6 +81,9 @@ build.ps1                # Compress-Archive helper
 
 ## Changelog
 
+### 1.2.3
+- Fixed: city search returned "nothing found" on hosts without the PHP `mbstring` extension. `mb_strtolower` / `mb_substr` are now called only when available, with UTF-8 safe fallbacks — warehouse lookup was unaffected, which made the failure look like an API key problem.
+
 ### 1.2.1
 - Verified clean rendering on the stock OpenCart 4.1.x `basic` theme (default appearance, `Auto` block theme).
 - Repository synced to the production codebase (git was previously lagging at 1.1.0 while 1.2.x shipped to the marketplace).

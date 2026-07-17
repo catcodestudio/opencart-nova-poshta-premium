@@ -128,7 +128,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		$this->model_setting_event->addEvent([
 			'code'        => 'nova_poshta_premium_order_added',
 			'description' => 'Nova Poshta Premium — capture cart shipping selection on order create',
-			'trigger'     => 'catalog/model/checkout/order/addOrder/after',
+			'trigger'     => 'catalog/model/checkout/order.addOrder/after',
 			'action'      => 'extension/nova_poshta_premium/events.orderAdded',
 			'status'      => 1,
 			'sort_order'  => 10,
@@ -136,7 +136,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		$this->model_setting_event->addEvent([
 			'code'        => 'nova_poshta_premium_order_history_added',
 			'description' => 'Nova Poshta Premium — auto-create TTN on order status reaching the configured trigger',
-			'trigger'     => 'catalog/model/checkout/order/addHistory/after',
+			'trigger'     => 'catalog/model/checkout/order.addHistory/after',
 			'action'      => 'extension/nova_poshta_premium/events.orderHistoryAdded',
 			'status'      => 1,
 			'sort_order'  => 10,
