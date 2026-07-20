@@ -205,8 +205,18 @@ $(function () {
   function alertBox(type, msg) {
     $('#np-alert').html('<div class="alert alert-' + type + ' alert-dismissible"><i class="fa fa-info-circle"></i> ' + msg + ' <button type="button" class="close" data-dismiss="alert">&times;</button></div>');
   }
+  // The key currently typed in the form. Every helper below sends it so a
+  // just-pasted key works before the settings are saved — otherwise the tools
+  // silently query with the stored (possibly empty) key.
+  function currentKey() {
+    return ($('#input-api-key').val() || '').trim();
+  }
+  function withKey(data) {
+    if (typeof data === 'string') { return data; }
+    return $.extend({ shipping_nova_poshta_api_key: currentKey() }, data || {});
+  }
   function post(url, data, done) {
-    $.ajax({ url: url, type: 'post', data: data, dataType: 'json',
+    $.ajax({ url: url, type: 'post', data: withKey(data), dataType: 'json',
       success: function (json) {
         if (json.error) { alertBox('danger', json.error); }
         else if (json.success) { alertBox('success', json.success); }
@@ -231,7 +241,7 @@ $(function () {
     clearTimeout(t);
     if (q.length < 2) { $('#np-city-list').hide(); return; }
     t = setTimeout(function () {
-      $.ajax({ url: '{{ search_cities|raw }}', type: 'post', data: { q: q }, dataType: 'json', success: function (json) {
+      $.ajax({ url: '{{ search_cities|raw }}', type: 'post', data: withKey({ q: q }), dataType: 'json', success: function (json) {
         var html = '';
         (json.cities || []).forEach(function (c) {
           html += '<li><a href="#" data-ref="' + c.ref + '" data-name="' + $('<i>').text(c.name).html() + '">' + $('<i>').text(c.name).html() + ' <small class="text-muted">' + $('<i>').text(c.area || '').html() + '</small></a></li>';
@@ -248,7 +258,7 @@ $(function () {
     loadWarehouses(ref);
   });
   function loadWarehouses(ref) {
-    $.ajax({ url: '{{ get_warehouses|raw }}', type: 'post', data: { city_ref: ref }, dataType: 'json', success: function (json) {
+    $.ajax({ url: '{{ get_warehouses|raw }}', type: 'post', data: withKey({ city_ref: ref }), dataType: 'json', success: function (json) {
       var html = '';
       (json.warehouses || []).forEach(function (w) {
         html += '<option value="' + w.ref + '">' + $('<i>').text(w.description).html() + '</option>';
@@ -272,7 +282,7 @@ $(function () {
   $('#np-cp').on('change', function () { $('#np-cp-name').val($('#np-cp option:selected').text()); loadContacts($(this).val()); });
   function loadContacts(cpRef) {
     if (!cpRef) return;
-    $.ajax({ url: '{{ url_contacts|raw }}', type: 'post', data: { counterparty_ref: cpRef }, dataType: 'json', success: function (json) {
+    $.ajax({ url: '{{ url_contacts|raw }}', type: 'post', data: withKey({ counterparty_ref: cpRef }), dataType: 'json', success: function (json) {
       var html = '';
       (json.contacts || []).forEach(function (c) {
         html += '<option value="' + c.ref + '" data-phone="' + (c.phone || '') + '">' + $('<i>').text(c.name).html() + '</option>';

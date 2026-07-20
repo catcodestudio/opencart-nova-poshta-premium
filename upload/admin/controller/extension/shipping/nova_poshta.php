@@ -21,6 +21,21 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 		return $raw === '' ? '' : NpCrypto::decrypt($raw);
 	}
 
+	/**
+	 * Key for the admin AJAX helpers (city search, warehouses, rate preview,
+	 * sender lookups). The one typed in the form wins over the stored one.
+	 *
+	 * Without this, a freshly pasted key passed the connection test (which
+	 * always used the posted value) while every other tool answered "nothing
+	 * found" until the settings were saved.
+	 */
+	private function requestApiKey() {
+		$posted = isset($this->request->post['shipping_nova_poshta_api_key'])
+			? trim((string)$this->request->post['shipping_nova_poshta_api_key'])
+			: '';
+		return $posted !== '' ? $posted : $this->apiKey();
+	}
+
 	public function install() {
 		$prefix = DB_PREFIX;
 
@@ -291,7 +306,7 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 			if ($query === '') {
 				$json['error'] = $this->language->get('error_query_empty');
 			} else {
-				$json = array('cities' => NpCache::searchCities($this->db, $query, $this->apiKey()));
+				$json = array('cities' => NpCache::searchCities($this->db, $query, $this->requestApiKey()));
 			}
 		}
 		$this->jsonResponse($json);
@@ -307,7 +322,7 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 			if ($cityRef === '') {
 				$json['error'] = $this->language->get('error_city_empty');
 			} else {
-				$json = array('warehouses' => NpCache::getWarehouses($this->db, $cityRef, $this->apiKey()));
+				$json = array('warehouses' => NpCache::getWarehouses($this->db, $cityRef, $this->requestApiKey()));
 			}
 		}
 		$this->jsonResponse($json);
@@ -319,7 +334,7 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 		if (!$this->user->hasPermission('modify', 'extension/shipping/nova_poshta')) {
 			$json['error'] = $this->language->get('error_permission');
 		} else {
-			$key       = $this->apiKey();
+			$key       = $this->requestApiKey();
 			$senderRef = (string)$this->config->get('shipping_nova_poshta_sender_city_ref');
 			$kyivRef   = '8d5a980d-391c-11dd-90d9-001a92567626';
 			if ($key === '') {
@@ -353,7 +368,7 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 		if (!$this->user->hasPermission('modify', 'extension/shipping/nova_poshta')) {
 			$json['error'] = $this->language->get('error_permission');
 		} else {
-			$key = $this->apiKey();
+			$key = $this->requestApiKey();
 			if ($key === '') {
 				$json['error'] = $this->language->get('error_api_key_empty');
 			} else {
@@ -381,7 +396,7 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 		if (!$this->user->hasPermission('modify', 'extension/shipping/nova_poshta')) {
 			$json['error'] = $this->language->get('error_permission');
 		} else {
-			$key = $this->apiKey();
+			$key = $this->requestApiKey();
 			$cpRef = (string)(isset($this->request->post['counterparty_ref']) ? $this->request->post['counterparty_ref'] : '');
 			if ($key === '' || $cpRef === '') {
 				$json['error'] = $this->language->get('error_api_key_empty');
