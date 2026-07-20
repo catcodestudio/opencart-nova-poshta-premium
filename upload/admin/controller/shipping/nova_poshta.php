@@ -22,6 +22,20 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		return $raw === '' ? '' : \Opencart\System\Library\NovaPoshta\Crypto::decrypt($raw);
 	}
 
+	/**
+	 * Key for the admin AJAX helpers (city search, warehouses, rate preview,
+	 * sender lookups). The one typed in the form wins over the stored one.
+	 *
+	 * Without this, a freshly pasted key passed "Перевірити підключення" (which
+	 * always used the posted value) while every other tool answered "нічого не
+	 * знайдено" until the settings were saved — a green checkmark next to dead
+	 * lookups reads as a broken module.
+	 */
+	private function requestApiKey(): string {
+		$posted = trim((string)($this->request->post['shipping_nova_poshta_api_key'] ?? ''));
+		return $posted !== '' ? $posted : $this->apiKey();
+	}
+
 	public function install(): void {
 		$prefix = DB_PREFIX;
 
@@ -350,7 +364,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			if ($query === '') {
 				$json['error'] = $this->language->get('error_query_empty');
 			} else {
-				$json = ['cities' => \Opencart\System\Library\NovaPoshta\Cache::searchCities($this->db, $query, $this->apiKey())];
+				$json = ['cities' => \Opencart\System\Library\NovaPoshta\Cache::searchCities($this->db, $query, $this->requestApiKey())];
 			}
 		}
 		$this->jsonResponse($json);
@@ -367,7 +381,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			if ($cityRef === '') {
 				$json['error'] = $this->language->get('error_city_empty');
 			} else {
-				$json = ['warehouses' => \Opencart\System\Library\NovaPoshta\Cache::getWarehouses($this->db, $cityRef, $this->apiKey())];
+				$json = ['warehouses' => \Opencart\System\Library\NovaPoshta\Cache::getWarehouses($this->db, $cityRef, $this->requestApiKey())];
 			}
 		}
 		$this->jsonResponse($json);
@@ -380,7 +394,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
 			$json['error'] = $this->language->get('error_permission');
 		} else {
-			$key       = $this->apiKey();
+			$key       = $this->requestApiKey();
 			$senderRef = (string)$this->config->get('shipping_nova_poshta_sender_city_ref');
 			$kyivRef   = '8d5a980d-391c-11dd-90d9-001a92567626';
 
@@ -416,7 +430,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
 			$json['error'] = $this->language->get('error_permission');
 		} else {
-			$key = $this->apiKey();
+			$key = $this->requestApiKey();
 			if ($key === '') {
 				$json['error'] = $this->language->get('error_api_key_empty');
 			} else {
@@ -444,7 +458,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
 			$json['error'] = $this->language->get('error_permission');
 		} else {
-			$key = $this->apiKey();
+			$key = $this->requestApiKey();
 			$cpRef = (string)($this->request->post['counterparty_ref'] ?? '');
 			if ($key === '' || $cpRef === '') {
 				$json['error'] = $this->language->get('error_api_key_empty');

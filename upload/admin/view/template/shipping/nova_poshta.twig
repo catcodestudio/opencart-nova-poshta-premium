@@ -223,12 +223,20 @@
 <script>
 (() => {
   const setResult = (el, msg, cls) => { el.textContent = msg; el.className = 'form-text ' + cls; };
-  const post = (url, body) => fetch(url, {
-    method: 'POST',
-    headers: {'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'XMLHttpRequest'},
-    credentials: 'same-origin',
-    body: body ? new URLSearchParams(body) : null
-  }).then(r => r.json());
+  // The key currently typed in the form. Every helper below sends it so a
+  // just-pasted key works before the settings are saved — otherwise the tools
+  // silently query with the stored (possibly empty) key.
+  const currentKey = () => (document.getElementById('input-api-key').value || '').trim();
+
+  const post = (url, body) => {
+    const payload = Object.assign({shipping_nova_poshta_api_key: currentKey()}, body || {});
+    return fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'XMLHttpRequest'},
+      credentials: 'same-origin',
+      body: new URLSearchParams(payload)
+    }).then(r => r.json());
+  };
 
   const btnTest = document.getElementById('button-test');
   btnTest.addEventListener('click', () => {
