@@ -23,7 +23,7 @@ Nova Poshta shipping integration for OpenCart 4.x merchants. Free download with 
 
 ## Pro features (require valid license)
 
-License key purchased separately from https://catcode.com.ua/modules/opencart-nova-poshta-premium — **₴2 990 one-time, lifetime** (no recurring fees, updates for the OC 4.x line included).
+License key purchased separately from https://catcode.com.ua/modules/opencart-nova-poshta-premium — **₴2 990 per year**, or a longer term at a discount (2–5 years, up to −25% per year). Updates and support are included for the whole term; when it ends the premium features lock and the free tier keeps working.
 
 - **COD reconciliation** — auto-attach `BackwardDelivery` on cash-on-delivery orders; daily payout sync against NP `getDocumentList` (BackwardDeliverySum + MoneyTransferNumber tracked per shipment)
 - **Status polling cron** (hourly) — batch `TrackingDocument.getStatusDocuments` keeps shipment dashboard live
@@ -40,7 +40,7 @@ License key purchased separately from https://catcode.com.ua/modules/opencart-no
 
 ## License
 
-Proprietary. **₴2 990 one-time, lifetime license** — no recurring fees, sold per-domain via catcode.com.ua.
+Proprietary. **₴2 990 per year**, term chosen at checkout (1–5 years, longer terms discounted). No auto-renewal — renewals are always manual. Sold per-domain via catcode.com.ua.
 
 ## Install (dev)
 
