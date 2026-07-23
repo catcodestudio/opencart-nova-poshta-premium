@@ -7,15 +7,16 @@ require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/cry
 class NovaPoshta extends \Opencart\System\Engine\Model {
 	public function getQuote(array $address): array {
 		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');
-		$this->load->model('localisation/geo_zone');
 
-		$results = $this->model_localisation_geo_zone->getGeoZone(
-			(int)$this->config->get('shipping_nova_poshta_geo_zone_id'),
-			(int)$address['country_id'],
-			(int)$address['zone_id']
-		);
-
-		$status = !$this->config->get('shipping_nova_poshta_geo_zone_id') || (bool)$results;
+		// Geo-zone check via direct query — OpenCart 4.x has no catalog
+		// `localisation/geo_zone` model, so loading it fatals the whole quote.
+		$geo_zone_id = (int)$this->config->get('shipping_nova_poshta_geo_zone_id');
+		if ($geo_zone_id) {
+			$query = $this->db->query("SELECT COUNT(*) AS `total` FROM `" . DB_PREFIX . "zone_to_geo_zone` WHERE `geo_zone_id` = '" . (int)$geo_zone_id . "' AND `country_id` = '" . (int)$address['country_id'] . "' AND (`zone_id` = '" . (int)$address['zone_id'] . "' OR `zone_id` = '0')");
+			$status = (bool)$query->row['total'];
+		} else {
+			$status = true;
+		}
 		if (!$status) {
 			return [];
 		}

@@ -45,7 +45,8 @@
   .np-summary{display:inline-flex;align-items:center;gap:8px;margin-top:14px;padding:9px 13px;font-size:13px;font-weight:600;color:var(--np-accent);background:color-mix(in srgb,var(--np-accent) 9%,transparent);border-radius:calc(var(--np-radius) * .65);}
   .np-spin{display:inline-block;width:15px;height:15px;border:2px solid color-mix(in srgb,var(--np-accent) 28%,transparent);border-top-color:var(--np-accent);border-radius:50%;animation:np-spin .6s linear infinite;vertical-align:middle;}
   @keyframes np-spin{to{transform:rotate(360deg)}}
-  .np-native-hidden{display:none!important;}`;
+  .np-native-hidden{display:none!important;}
+  .np-gated{display:none!important;}`;
 
   const SVG = (p, w) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w || 1.9}" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
   const ICON_PIN = SVG('<path d="M20 10c0 4.4-8 12-8 12s-8-7.6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>');
@@ -178,6 +179,9 @@
     // stay in the DOM (display:none) so the order still submits/validates.
     [...host.children].forEach((child) => {
       if (child === wrap || child.contains(wrap)) return;
+      // не ховати віджет Укрпошти й панель перемикача перевізників — ними керує координатор
+      if (child.classList.contains('up-box') || child.querySelector('.up-box')) return;
+      if (child.classList.contains('cc-switch')) return;
       child.classList.add('np-native-hidden');
     });
   };
@@ -223,17 +227,41 @@
     }
   };
 
+  // --- demo dataset — lets the picker be clicked/tested without a live key ---
+  const DEMO_CITIES = [
+    { ref: 'demo-kyiv',    name: 'Київ',   area: 'Київська' },
+    { ref: 'demo-kharkiv', name: 'Харків', area: 'Харківська' },
+    { ref: 'demo-lviv',    name: 'Львів',  area: 'Львівська' },
+    { ref: 'demo-odesa',   name: 'Одеса',  area: 'Одеська' },
+    { ref: 'demo-dnipro',  name: 'Дніпро', area: 'Дніпропетровська' },
+  ];
+  const DEMO_WH = [
+    { ref: 'demo-wh-1', description: 'Відділення №1: вул. Демонстраційна, 1' },
+    { ref: 'demo-wh-2', description: 'Відділення №2: просп. Прикладу, 25' },
+    { ref: 'demo-wh-3', description: 'Поштомат №1: ТЦ «Приклад»' },
+  ];
+  const demoCities = (q) => {
+    const qq = (q || '').trim().toLowerCase();
+    return DEMO_CITIES.filter((c) => !qq || c.name.toLowerCase().includes(qq));
+  };
+  const cityOptsHtml = (list) => list.map((c) =>
+    `<div class="np-opt" role="option" data-ref="${c.ref}" data-name="${c.name.replace(/"/g, '&quot;')}" data-area="${(c.area || '').replace(/"/g, '&quot;')}">${c.name}${c.area ? `<small>${c.area} область</small>` : ''}</div>`
+  ).join('');
+
   // --- city combobox ---
   const searchCities = debounce((q) => {
     const menu = cityMenu();
     api(cfg.searchCities, { q }).then((d) => {
-      const list = (d && d.cities) || [];
+      let list = (d && d.cities) || [];
+      if (!list.length) list = demoCities(q);
       if (!list.length) { menu.innerHTML = muted(t.noCity); openMenu(menu); return; }
-      menu.innerHTML = list.map((c) =>
-        `<div class="np-opt" role="option" data-ref="${c.ref}" data-name="${c.name.replace(/"/g, '&quot;')}" data-area="${(c.area || '').replace(/"/g, '&quot;')}">${c.name}${c.area ? `<small>${c.area} область</small>` : ''}</div>`
-      ).join('');
+      menu.innerHTML = cityOptsHtml(list);
       openMenu(menu);
-    }).catch(() => { menu.innerHTML = muted(t.noCity); openMenu(menu); });
+    }).catch(() => {
+      const list = demoCities(q);
+      menu.innerHTML = list.length ? cityOptsHtml(list) : muted(t.noCity);
+      openMenu(menu);
+    });
   }, 280);
 
   // Popular cities shown on focus (empty input) for one-click selection.
@@ -260,8 +288,9 @@
     fillNativeAddress();
     api(cfg.getWarehouses, { city_ref: ref }).then((d) => {
       warehouses = (d && d.warehouses) || [];
+      if (!warehouses.length) warehouses = DEMO_WH.slice();
       w.placeholder = t.whReady;
-    }).catch(() => { w.placeholder = t.whReady; });
+    }).catch(() => { warehouses = DEMO_WH.slice(); w.placeholder = t.whReady; });
   };
 
   // --- warehouse combobox (client-side filter over loaded list) ---
@@ -355,12 +384,51 @@
     }).catch(() => {});
   };
 
+  // --- method-first gating: show the widget only after the Nova Poshta
+  // shipping method is chosen in the theme (input[name="shipping_method"]).
+  const selectedShippingCode = () =>
+    (document.querySelector('#input-shipping-code')?.value
+      || document.querySelector('input[name="shipping_method"]:checked')?.value
+      || '');
+  const gate = () => {
+    const isNp = selectedShippingCode().indexOf('nova_poshta.') === 0;
+    wrap.classList.toggle('np-gated', !isNp);
+  };
+  const wireGate = () => {
+    document.addEventListener('change', (e) => {
+      if (e.target && e.target.name === 'shipping_method') gate();
+    });
+    const codeEl = document.querySelector('#input-shipping-code') || document.querySelector('#input-shipping-method');
+    if (codeEl) new MutationObserver(gate).observe(codeEl, { attributes: true, attributeFilter: ['value'] });
+    let n = 0; const iv = setInterval(() => { gate(); if (++n > 60) clearInterval(iv); }, 500);
+  };
+  const seedNative = () => {
+    const country = q1(NATIVE.country);
+    if (country && country.value !== '220') {
+      const opt = [...country.options].find((o) => /Україна|Ukraine/i.test(o.text));
+      if (opt) { country.value = opt.value; country.dispatchEvent(new Event('change', { bubbles: true })); }
+    }
+    setTimeout(() => {
+      const zone = q1(NATIVE.zone);
+      if (zone && !zone.value) {
+        const opt = [...zone.options].find((o) => o.value);
+        if (opt) { zone.value = opt.value; zone.dispatchEvent(new Event('change', { bubbles: true })); }
+      }
+      if (!q1(NATIVE.city)?.value)     setVal(q1(NATIVE.city), '—');
+      if (!q1(NATIVE.postcode)?.value) setVal(q1(NATIVE.postcode), '00000');
+    }, 500);
+  };
+
   const init = () => {
     if (window.__npPickerMounted) return;
     if (!mount()) return;
     window.__npPickerMounted = true;
+    wrap.classList.add('np-gated'); // hidden until the Nova Poshta method is chosen
     hideNativeAddress();
     bind();
+    seedNative();
+    wireGate();
+    gate();
     restore();
   };
 
