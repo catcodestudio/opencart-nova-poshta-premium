@@ -186,6 +186,23 @@
     });
   };
 
+  // Cyrillic → Latin (national standard) so a Ukrainian oblast name can be
+  // compared against a transliterated OpenCart zone list.
+  const TRANSLIT = { 'а':'a','б':'b','в':'v','г':'h','ґ':'g','д':'d','е':'e','є':'ie','ж':'zh','з':'z','и':'y','і':'i','ї':'i','й':'i','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'kh','ц':'ts','ч':'ch','ш':'sh','щ':'shch','ь':'','ю':'iu','я':'ia',"'":'','’':'' };
+  const translit = (s) => (s || '').toLowerCase().split('').map((ch) => (ch in TRANSLIT ? TRANSLIT[ch] : ch)).join('');
+  const normLat = (s) => (s || '').toLowerCase().replace(/[^a-z]/g, '');
+  // Returns the zone <option> matching the given (Cyrillic) oblast name, or null.
+  const matchZone = (zoneSel, area) => {
+    const key = normLat(translit((area || '').replace(/\s*(область|обл\.?|oblast'?)\s*/gi, '')));
+    if (!key) return null;
+    const opts = [...zoneSel.options].filter((o) => o.value);
+    // Prefix match both ways: "kharkivska" ⊂ "kharkivskaoblast", or a bare
+    // "kyiv" zone ⊂ area "kyivska" — the longer/oblast form wins over the city.
+    return opts.find((o) => normLat(o.text).indexOf(key) === 0)
+        || opts.find((o) => key.indexOf(normLat(o.text)) === 0)
+        || null;
+  };
+
   // Keep the (hidden) native fields valid so checkout never blocks on them.
   const fillNativeAddress = () => {
     const country = q1(NATIVE.country);
@@ -195,9 +212,13 @@
     }
     const zone = q1(NATIVE.zone);
     if (zone) {
-      let opt = cityArea && [...zone.options].find((o) => o.value && o.text.includes(cityArea));
-      if (!opt) opt = [...zone.options].find((o) => o.value && /Київ/.test(o.text));
-      if (!opt) opt = [...zone.options].find((o) => o.value);
+      // Match the OpenCart zone to the NP oblast. Zone lists are frequently
+      // transliterated (e.g. "Kharkivs'ka Oblast'"), so a raw Cyrillic compare
+      // against `cityArea` never hits and the old code fell back to the FIRST
+      // option — always "Avtonomna Respublika Krym". Transliterate the Cyrillic
+      // area and match on the normalized prefix instead. Only touch the zone on
+      // a real match; never force a wrong first option.
+      const opt = matchZone(zone, cityArea);
       if (opt && zone.value !== opt.value) { zone.value = opt.value; zone.dispatchEvent(new Event('change', { bubbles: true })); }
     }
     setVal(q1(NATIVE.city),     cityName || 'Україна');
