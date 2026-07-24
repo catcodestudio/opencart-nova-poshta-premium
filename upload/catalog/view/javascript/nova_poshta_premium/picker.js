@@ -495,6 +495,55 @@
     refresh();
   };
 
+  // --- keep the chosen carrier across «Зберегти дані» ------------------------
+  // Stock OpenCart 4 register.save wipes the selected shipping AND payment
+  // method from the session and blanks their display inputs (only the hidden
+  // #input-shipping-code / #input-payment-code survive), then reloads the
+  // confirm block — so the customer has to pick the carrier a second time after
+  // saving their contact data. Re-apply the retained codes for them: re-quote
+  // (register.save may have changed the address), re-save both methods and
+  // reload the confirm block. Shared across both carrier modules — the first
+  // picker to load wires it, and it restores whatever code the theme holds.
+  const wireMethodPersistence = () => {
+    if (window.__ccMethodPersistWired) return;
+    if (!window.jQuery) return; // no theme AJAX to hook — keep stock behaviour
+    window.__ccMethodPersistWired = true;
+    const $ = window.jQuery;
+    const langParam = new URLSearchParams(location.search).get('language');
+    const L = langParam ? '&language=' + encodeURIComponent(langParam) : '';
+    const U = (r) => 'index.php?route=' + r + L;
+
+    $(document).ajaxSuccess((e, xhr, settings) => {
+      if ((((settings && settings.url) || '')).indexOf('register.save') === -1) return;
+      let ok = false; try { ok = !!(JSON.parse(xhr.responseText) || {}).success; } catch (err) { /* not json */ }
+      if (!ok || window.__ccRestoringMethods) return;
+      const shipCode = ($('#input-shipping-code').val() || '').trim();
+      const payCode = ($('#input-payment-code').val() || '').trim();
+      if (!shipCode) return; // no carrier was chosen before saving contacts
+      window.__ccRestoringMethods = true;
+      const done = () => { window.__ccRestoringMethods = false; if (window.__ccGateRefresh) window.__ccGateRefresh(); };
+      const reloadConfirm = () => { $('#checkout-confirm').load(U('checkout/confirm.confirm'), done); };
+      const restorePayment = () => {
+        if (!payCode) return reloadConfirm();
+        $.ajax({ url: U('checkout/payment_method.getMethods'), dataType: 'json' }).done((pm) => {
+          let plabel = '';
+          const groups = (pm && pm.payment_methods) || {};
+          for (const i in groups) { const opt = groups[i].option || {}; for (const k in opt) if (opt[k].code === payCode) plabel = opt[k].name; }
+          $.ajax({ url: U('checkout/payment_method.save'), type: 'post', data: { payment_method: payCode }, dataType: 'json' })
+            .always(() => { if (plabel) $('#input-payment-method').val(plabel); reloadConfirm(); });
+        }).fail(reloadConfirm);
+      };
+      $.ajax({ url: U('checkout/shipping_method.quote'), dataType: 'json' }).done((q) => {
+        let label = '';
+        const methods = (q && q.shipping_methods) || {};
+        for (const i in methods) { const quotes = methods[i].quote || {}; for (const j in quotes) if (quotes[j].code === shipCode) label = quotes[j].name + ' - ' + quotes[j].text; }
+        if (!label) return done(); // carrier no longer quotable for the saved address
+        $.ajax({ url: U('checkout/shipping_method.save'), type: 'post', data: { shipping_method: shipCode }, dataType: 'json' })
+          .always(() => { $('#input-shipping-method').val(label); restorePayment(); });
+      }).fail(done);
+    });
+  };
+
   const seedNative = () => {
     const country = q1(NATIVE.country);
     if (country && country.value !== '220') {
@@ -532,6 +581,7 @@
     seedNative();
     wireGate();
     wireConfirmGate();
+    wireMethodPersistence();
     gate();
     restore();
   };
