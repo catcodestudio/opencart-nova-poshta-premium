@@ -133,6 +133,12 @@ class Events extends \Opencart\System\Engine\Controller {
 		if ($order_id <= 0) {
 			return;
 		}
+		// Only act on orders actually shipped by this carrier — a stale NP
+		// selection in the session must not attach drafts to Ukrposhta orders.
+		$method = (string)($this->session->data['shipping_method']['code'] ?? '');
+		if (strpos($method, 'nova_poshta.') !== 0) {
+			return;
+		}
 		$cityRef = (string)($this->session->data['np_recipient_city_ref'] ?? '');
 		$whRef   = (string)($this->session->data['np_recipient_warehouse_ref'] ?? '');
 		$whName  = (string)($this->session->data['np_recipient_warehouse_name'] ?? '');
@@ -140,6 +146,22 @@ class Events extends \Opencart\System\Engine\Controller {
 		if ($cityRef === '' && $whRef === '') {
 			return; // Customer used a different shipping method.
 		}
+		// The order address must carry OUR data verbatim: the NP classifier city
+		// and oblast (Cyrillic) and the picked branch; NP branches have no postal
+		// code, so the index is emptied — never a '00000' placeholder that the
+		// hidden native form may have frozen into the order.
+		$area = (string)($this->session->data['np_recipient_city_area'] ?? '');
+		$sets = ["shipping_postcode = ''"];
+		if ($cityName !== '') {
+			$sets[] = "shipping_city = '" . $this->db->escape($cityName) . "'";
+		}
+		if ($whName !== '') {
+			$sets[] = "shipping_address_1 = '" . $this->db->escape($whName) . "'";
+		}
+		if ($area !== '') {
+			$sets[] = "shipping_zone = '" . $this->db->escape($area) . "'";
+		}
+		$this->db->query("UPDATE `" . DB_PREFIX . "order` SET " . implode(', ', $sets) . " WHERE order_id = " . $order_id);
 		$senderCity = (string)$this->config->get('shipping_nova_poshta_sender_city_ref');
 		$senderWh   = (string)$this->config->get('shipping_nova_poshta_sender_warehouse_ref');
 		$this->db->query("INSERT INTO `" . DB_PREFIX . "np_shipment` SET

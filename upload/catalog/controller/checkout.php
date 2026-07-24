@@ -75,7 +75,8 @@ class Checkout extends \Opencart\System\Engine\Controller {
 		if (!$country) {
 			return;
 		}
-		$zone = $this->matchZone((int)$country['country_id'], (string)($this->session->data['np_recipient_city_area'] ?? ''));
+		$area = (string)($this->session->data['np_recipient_city_area'] ?? '');
+		$zone = $this->matchZone((int)$country['country_id'], $area);
 		$wh   = (string)($this->session->data['np_recipient_warehouse_name'] ?? '');
 		$prev = (array)($this->session->data['shipping_address'] ?? []);
 		$this->session->data['shipping_address'] = [
@@ -88,7 +89,10 @@ class Checkout extends \Opencart\System\Engine\Controller {
 			'city'           => $city,
 			'postcode'       => '',
 			'zone_id'        => $zone ? (int)$zone['zone_id'] : (int)($prev['zone_id'] ?? 0),
-			'zone'           => $zone ? (string)$zone['name'] : (string)($prev['zone'] ?? ''),
+			// Display the oblast exactly as the NP classifier names it (Cyrillic),
+			// not the store's often-transliterated zone dictionary entry; zone_id
+			// still carries the matched store zone for geo/tax logic.
+			'zone'           => $area !== '' ? $area : ($zone ? (string)$zone['name'] : (string)($prev['zone'] ?? '')),
 			'zone_code'      => $zone ? (string)$zone['code'] : (string)($prev['zone_code'] ?? ''),
 			'country_id'     => (int)$country['country_id'],
 			'country'        => (string)($country['name'] ?? 'Ukraine'),
