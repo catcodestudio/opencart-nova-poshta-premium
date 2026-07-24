@@ -22,20 +22,6 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		return $raw === '' ? '' : \Opencart\System\Library\NovaPoshta\Crypto::decrypt($raw);
 	}
 
-	/**
-	 * Key for the admin AJAX helpers (city search, warehouses, rate preview,
-	 * sender lookups). The one typed in the form wins over the stored one.
-	 *
-	 * Without this, a freshly pasted key passed "Перевірити підключення" (which
-	 * always used the posted value) while every other tool answered "нічого не
-	 * знайдено" until the settings were saved — a green checkmark next to dead
-	 * lookups reads as a broken module.
-	 */
-	private function requestApiKey(): string {
-		$posted = trim((string)($this->request->post['shipping_nova_poshta_api_key'] ?? ''));
-		return $posted !== '' ? $posted : $this->apiKey();
-	}
-
 	public function install(): void {
 		$prefix = DB_PREFIX;
 
@@ -136,21 +122,43 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
 		$this->load->model('setting/event');
-		$this->model_setting_event->deleteEventByCode('nova_poshta_premium_order_added');
-		$this->model_setting_event->deleteEventByCode('nova_poshta_premium_order_history_added');
-		$this->model_setting_event->deleteEventByCode('nova_poshta_premium_footer_inject');
+		foreach (['nova_poshta_premium_order_added', 'nova_poshta_premium_order_added_slash', 'nova_poshta_premium_order_history_added', 'nova_poshta_premium_order_history_added_slash', 'nova_poshta_premium_footer_inject'] as $code) {
+			$this->model_setting_event->deleteEventByCode($code);
+		}
+		// OpenCart 4 fires model events as `model/<route>/<before|after>` — the
+		// `catalog/` prefix is stripped by catalog/controller/startup/event.php.
+		// The method separator differs by minor version, and a trigger that
+		// doesn't match fires nothing (no error): OC 4.1.x uses a DOT
+		// (`order.addOrder`) while OC 4.0.2.x uses a SLASH (`order/addOrder`).
+		// Register both so the capture works on either branch.
 		$this->model_setting_event->addEvent([
 			'code'        => 'nova_poshta_premium_order_added',
-			'description' => 'Nova Poshta Premium — capture cart shipping selection on order create',
-			'trigger'     => 'catalog/model/checkout/order*addOrder/after',
+			'description' => 'Nova Poshta Premium — capture cart shipping selection on order create (OC 4.1.x dot separator)',
+			'trigger'     => 'catalog/model/checkout/order.addOrder/after',
+			'action'      => 'extension/nova_poshta_premium/events.orderAdded',
+			'status'      => 1,
+			'sort_order'  => 10,
+		]);
+		$this->model_setting_event->addEvent([
+			'code'        => 'nova_poshta_premium_order_added_slash',
+			'description' => 'Nova Poshta Premium — capture cart shipping selection on order create (OC 4.0.2.x slash separator)',
+			'trigger'     => 'catalog/model/checkout/order/addOrder/after',
 			'action'      => 'extension/nova_poshta_premium/events.orderAdded',
 			'status'      => 1,
 			'sort_order'  => 10,
 		]);
 		$this->model_setting_event->addEvent([
 			'code'        => 'nova_poshta_premium_order_history_added',
-			'description' => 'Nova Poshta Premium — auto-create TTN on order status reaching the configured trigger',
-			'trigger'     => 'catalog/model/checkout/order*addHistory/after',
+			'description' => 'Nova Poshta Premium — auto-create TTN on order status reaching the configured trigger (OC 4.1.x dot separator)',
+			'trigger'     => 'catalog/model/checkout/order.addHistory/after',
+			'action'      => 'extension/nova_poshta_premium/events.orderHistoryAdded',
+			'status'      => 1,
+			'sort_order'  => 10,
+		]);
+		$this->model_setting_event->addEvent([
+			'code'        => 'nova_poshta_premium_order_history_added_slash',
+			'description' => 'Nova Poshta Premium — auto-create TTN on order status reaching the configured trigger (OC 4.0.2.x slash separator)',
+			'trigger'     => 'catalog/model/checkout/order/addHistory/after',
 			'action'      => 'extension/nova_poshta_premium/events.orderHistoryAdded',
 			'status'      => 1,
 			'sort_order'  => 10,
@@ -199,7 +207,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 
 	public function uninstall(): void {
 		$this->load->model('setting/event');
-		foreach (['nova_poshta_premium_order_added', 'nova_poshta_premium_order_history_added', 'nova_poshta_premium_footer_inject'] as $code) {
+		foreach (['nova_poshta_premium_order_added', 'nova_poshta_premium_order_added_slash', 'nova_poshta_premium_order_history_added', 'nova_poshta_premium_order_history_added_slash', 'nova_poshta_premium_footer_inject'] as $code) {
 			try { $this->model_setting_event->deleteEventByCode($code); } catch (\Throwable $e) {}
 		}
 		$this->load->model('setting/cron');
@@ -364,7 +372,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			if ($query === '') {
 				$json['error'] = $this->language->get('error_query_empty');
 			} else {
-				$json = ['cities' => \Opencart\System\Library\NovaPoshta\Cache::searchCities($this->db, $query, $this->requestApiKey())];
+				$json = ['cities' => \Opencart\System\Library\NovaPoshta\Cache::searchCities($this->db, $query, $this->apiKey())];
 			}
 		}
 		$this->jsonResponse($json);
@@ -381,7 +389,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			if ($cityRef === '') {
 				$json['error'] = $this->language->get('error_city_empty');
 			} else {
-				$json = ['warehouses' => \Opencart\System\Library\NovaPoshta\Cache::getWarehouses($this->db, $cityRef, $this->requestApiKey())];
+				$json = ['warehouses' => \Opencart\System\Library\NovaPoshta\Cache::getWarehouses($this->db, $cityRef, $this->apiKey())];
 			}
 		}
 		$this->jsonResponse($json);
@@ -394,7 +402,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
 			$json['error'] = $this->language->get('error_permission');
 		} else {
-			$key       = $this->requestApiKey();
+			$key       = $this->apiKey();
 			$senderRef = (string)$this->config->get('shipping_nova_poshta_sender_city_ref');
 			$kyivRef   = '8d5a980d-391c-11dd-90d9-001a92567626';
 
@@ -430,7 +438,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
 			$json['error'] = $this->language->get('error_permission');
 		} else {
-			$key = $this->requestApiKey();
+			$key = $this->apiKey();
 			if ($key === '') {
 				$json['error'] = $this->language->get('error_api_key_empty');
 			} else {
@@ -458,7 +466,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
 			$json['error'] = $this->language->get('error_permission');
 		} else {
-			$key = $this->requestApiKey();
+			$key = $this->apiKey();
 			$cpRef = (string)($this->request->post['counterparty_ref'] ?? '');
 			if ($key === '' || $cpRef === '') {
 				$json['error'] = $this->language->get('error_api_key_empty');

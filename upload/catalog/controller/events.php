@@ -22,6 +22,7 @@ class Events extends \Opencart\System\Engine\Controller {
 		if (!is_string($output) || stripos($output, '</body>') === false) {
 			return;
 		}
+		$this->seedShippingAddress();
 		$baseUrl = defined('HTTPS_SERVER') ? HTTPS_SERVER : HTTP_SERVER;
 		$accent = (string)($this->config->get('shipping_nova_poshta_accent_color') ?: '#da291c');
 		if (!preg_match('/^#[0-9a-fA-F]{6}$/', $accent)) {
@@ -51,6 +52,68 @@ class Events extends \Opencart\System\Engine\Controller {
 		$pickerJs = $this->pickerScript();
 		$tag = '<script>window.__novaPoshtaPremium=' . $jsonEndpoints . ';' . $pickerJs . '</script>';
 		$output = str_replace('</body>', $tag . '</body>', $output);
+	}
+
+	/**
+	 * Fresh guest session on the checkout page: the core refuses to quote
+	 * shipping methods until session['shipping_address'] exists, but the manual
+	 * address form is replaced by the carrier picker — so the customer hits a
+	 * dead «Потрібна адреса доставки!» before doing anything. Seed a minimal
+	 * Ukraine address once (address_id=0, no zone) so the method list opens in
+	 * the natural order; the picker/setSelection then writes the real address.
+	 */
+	private function seedShippingAddress(): void {
+		if (((string)($this->request->get['route'] ?? '')) !== 'checkout/checkout') {
+			return;
+		}
+		if (isset($this->session->data['shipping_address']['address_id'])) {
+			return;
+		}
+		$this->load->model('localisation/country');
+		$info = $this->model_localisation_country->getCountry((int)$this->config->get('config_country_id'));
+		if (!$info || strtoupper((string)($info['iso_code_2'] ?? '')) !== 'UA') {
+			$row = $this->db->query("SELECT country_id FROM `" . DB_PREFIX . "country` WHERE iso_code_2 = 'UA' AND status = 1")->row;
+			if ($row) {
+				$info = $this->model_localisation_country->getCountry((int)$row['country_id']);
+			}
+		}
+		if (!$info) {
+			return;
+		}
+		// The same core gate also demands session['customer'] before quoting.
+		// Seed an empty guest stub (customer_id=0) — register.save overwrites it
+		// with the real contact data. The picker JS keeps the confirm button
+		// gated until that save happens, so no anonymous order can slip through.
+		if (!isset($this->session->data['customer'])) {
+			$this->session->data['customer'] = [
+				'customer_id'       => 0,
+				'customer_group_id' => (int)$this->config->get('config_customer_group_id'),
+				'firstname'         => '',
+				'lastname'          => '',
+				'email'             => '',
+				'telephone'         => '',
+				'custom_field'      => [],
+			];
+		}
+		$this->session->data['shipping_address'] = [
+			'address_id'     => 0,
+			'firstname'      => '',
+			'lastname'       => '',
+			'company'        => '',
+			'address_1'      => '',
+			'address_2'      => '',
+			'city'           => '',
+			'postcode'       => '',
+			'zone_id'        => 0,
+			'zone'           => '',
+			'zone_code'      => '',
+			'country_id'     => (int)$info['country_id'],
+			'country'        => (string)($info['name'] ?? 'Ukraine'),
+			'iso_code_2'     => (string)($info['iso_code_2'] ?? 'UA'),
+			'iso_code_3'     => (string)($info['iso_code_3'] ?? 'UKR'),
+			'address_format' => (string)($info['address_format'] ?? ''),
+			'custom_field'   => [],
+		];
 	}
 
 	private function pickerScript(): string {
