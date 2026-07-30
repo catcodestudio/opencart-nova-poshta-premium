@@ -70,6 +70,95 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 
 	/* ---------- Events ---------- */
 
+	/**
+	 * controller/checkout/{guest,register,payment_address,shipping_address}/save/before
+	 *
+	 * The customer picks a Nova Poshta branch in our widget, which lives in the
+	 * delivery step — i.e. *after* OpenCart's address step has already demanded a
+	 * street address. Merchants work around that by hiding the native address
+	 * fields, which leaves the required Address 1 empty: the step then fails
+	 * validation against an invisible field and the checkout silently refuses to
+	 * advance. Supply a sane value for the hidden fields so that never happens —
+	 * the real destination (branch or, for pickup, the store) is written onto the
+	 * order by addOrderBefore() once the delivery method is known.
+	 */
+	public function addressPresave(&$route, &$args) {
+		if (!isset($this->request->post['address_1'])) {
+			return;
+		}
+		if (trim((string)$this->request->post['address_1']) !== '') {
+			return;
+		}
+		$this->request->post['address_1'] = $this->fallbackAddress();
+
+		// Only fill a blank postcode; countries that really require one still get
+		// the customer's own value whenever the field is visible and filled in.
+		if (isset($this->request->post['postcode']) && trim((string)$this->request->post['postcode']) === '') {
+			$this->request->post['postcode'] = '00000';
+		}
+	}
+
+	/**
+	 * The typed city, else a neutral placeholder.
+	 *
+	 * Deliberately NOT the Nova Poshta branch from the session: the address step
+	 * runs before the delivery method is chosen, so a branch left over from an
+	 * earlier pick would end up on a pickup or courier order. addOrderBefore()
+	 * stamps the branch once the method is known to be ours.
+	 */
+	private function fallbackAddress() {
+		$city = trim((string)(isset($this->request->post['city']) ? $this->request->post['city'] : ''));
+		// OpenCart requires 3..128 chars, so a 1-2 letter city cannot stand alone.
+		if ($city !== '' && strlen($city) >= 3) {
+			return self::cut($city, 128);
+		}
+		return 'Уточнюється';
+	}
+
+	/**
+	 * Is this order actually shipping with us? Reads the order data OpenCart is
+	 * about to persist, falling back to the session's chosen method so both the
+	 * before- and after-addOrder hooks agree.
+	 */
+	private function isOurShipping($order_data) {
+		$code = '';
+		if (is_array($order_data) && isset($order_data['shipping_code'])) {
+			$code = (string)$order_data['shipping_code'];
+		}
+		if ($code === '' && isset($this->session->data['shipping_method']['code'])) {
+			$code = (string)$this->session->data['shipping_method']['code'];
+		}
+		// No method at all (e.g. a downloadable-only order): not ours.
+		if ($code === '') {
+			return false;
+		}
+		return strpos($code, 'nova_poshta') === 0;
+	}
+
+	/**
+	 * catalog/model/checkout/order/addOrder/before — args[0] is the order data.
+	 * Stamp the confirmed Nova Poshta destination onto the order address so the
+	 * merchant sees "City — Branch" instead of the placeholder above.
+	 */
+	public function addOrderBefore(&$route, &$args) {
+		if (!isset($args[0]) || !is_array($args[0])) {
+			return;
+		}
+		$city = trim((string)(isset($this->session->data['np_recipient_city_name']) ? $this->session->data['np_recipient_city_name'] : ''));
+		$wh   = trim((string)(isset($this->session->data['np_recipient_warehouse_name']) ? $this->session->data['np_recipient_warehouse_name'] : ''));
+		if ($wh === '') {
+			return;
+		}
+		// Never stamp a branch onto a pickup/courier order.
+		if (!$this->isOurShipping($args[0])) {
+			return;
+		}
+		$args[0]['shipping_address_1'] = self::cut($wh, 128);
+		if ($city !== '') {
+			$args[0]['shipping_city'] = self::cut($city, 128);
+		}
+	}
+
 	/** view/common/footer/after — inject picker widget before </body>. */
 	public function footerInject(&$route, &$data, &$output) {
 		if (!is_string($output) || stripos($output, '</body>') === false) {
@@ -117,6 +206,12 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 	public function orderAdded(&$route, &$args, &$output) {
 		$order_id = (int)($output ? $output : 0);
 		if ($order_id <= 0) {
+			return;
+		}
+		// A shopper may pick a branch and then switch to pickup or a courier. The
+		// session still holds that branch, so without this guard every such order
+		// got a Nova Poshta draft shipment it must never have.
+		if (!$this->isOurShipping(isset($args[0]) ? $args[0] : array())) {
 			return;
 		}
 		$cityRef  = (string)(isset($this->session->data['np_recipient_city_ref']) ? $this->session->data['np_recipient_city_ref'] : '');

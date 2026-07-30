@@ -126,12 +126,20 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 
 		// Register events (OC3 positional addEvent; triggers app-prefixed).
 		$this->load->model('setting/event');
-		$this->model_setting_event->deleteEventByCode('np_premium_order_added');
-		$this->model_setting_event->deleteEventByCode('np_premium_order_history');
-		$this->model_setting_event->deleteEventByCode('np_premium_footer_inject');
+		foreach ($this->eventCodes() as $code) {
+			$this->model_setting_event->deleteEventByCode($code);
+		}
 		$this->model_setting_event->addEvent('np_premium_order_added', 'catalog/model/checkout/order/addOrder/after', 'extension/shipping/nova_poshta/orderAdded', 1, 10);
+		$this->model_setting_event->addEvent('np_premium_order_before', 'catalog/model/checkout/order/addOrder/before', 'extension/shipping/nova_poshta/addOrderBefore', 1, 10);
 		$this->model_setting_event->addEvent('np_premium_order_history', 'catalog/model/checkout/order/addOrderHistory/after', 'extension/shipping/nova_poshta/orderHistoryAdded', 1, 10);
 		$this->model_setting_event->addEvent('np_premium_footer_inject', 'catalog/view/common/footer/after', 'extension/shipping/nova_poshta/footerInject', 1, 10);
+		// The branch is chosen in the delivery step, after OpenCart's address step
+		// has already validated its required Address 1 — keep that hidden field
+		// filled so a hidden-field error can never stall the checkout.
+		$this->model_setting_event->addEvent('np_premium_addr_guest', 'catalog/controller/checkout/guest/save/before', 'extension/shipping/nova_poshta/addressPresave', 1, 10);
+		$this->model_setting_event->addEvent('np_premium_addr_register', 'catalog/controller/checkout/register/save/before', 'extension/shipping/nova_poshta/addressPresave', 1, 10);
+		$this->model_setting_event->addEvent('np_premium_addr_payment', 'catalog/controller/checkout/payment_address/save/before', 'extension/shipping/nova_poshta/addressPresave', 1, 10);
+		$this->model_setting_event->addEvent('np_premium_addr_shipping', 'catalog/controller/checkout/shipping_address/save/before', 'extension/shipping/nova_poshta/addressPresave', 1, 10);
 
 		// Grant access+modify on our admin routes to the current user group.
 		$this->load->model('user/user_group');
@@ -143,9 +151,23 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 		}
 	}
 
+	/** Every event code this extension owns — install/uninstall stay in sync. */
+	private function eventCodes() {
+		return array(
+			'np_premium_order_added',
+			'np_premium_order_before',
+			'np_premium_order_history',
+			'np_premium_footer_inject',
+			'np_premium_addr_guest',
+			'np_premium_addr_register',
+			'np_premium_addr_payment',
+			'np_premium_addr_shipping',
+		);
+	}
+
 	public function uninstall() {
 		$this->load->model('setting/event');
-		foreach (array('np_premium_order_added', 'np_premium_order_history', 'np_premium_footer_inject') as $code) {
+		foreach ($this->eventCodes() as $code) {
 			try { $this->model_setting_event->deleteEventByCode($code); } catch (\Exception $e) {}
 		}
 		// Tables preserved on uninstall to avoid losing shipment history.

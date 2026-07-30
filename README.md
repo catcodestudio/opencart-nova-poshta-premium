@@ -89,6 +89,28 @@ build.ps1                # Compress-Archive helper
 
 ## Changelog
 
+### 1.2.6 (OpenCart 3.x)
+- **Checkout no longer dead-ends on the address step.** OpenCart validates a
+  required Address 1 before the delivery method is known, so stores that hide the
+  native address fields (the usual setup when the branch picker collects the
+  destination) failed validation against an invisible field: pressing Continue
+  did nothing, with no visible error. The address steps now receive a valid
+  fallback (`addressPresave` on `checkout/{guest,register,payment_address,shipping_address}/save/before`).
+- **Branch picker no longer vanishes.** It latched a "mounted" flag and stopped
+  observing, so the next AJAX step reload removed the widget for good. Mounting
+  is now re-checked against the live DOM.
+- **Picker mounts where the customer can see it.** It could land in the Delivery
+  Details step, which OpenCart renders but never opens when "delivery address =
+  billing address" is kept — the block was invisible for those orders. Only a
+  step that is actually on screen is used, and the billing step is no longer a
+  fallback host (a branch number has no place there when the order is pickup).
+- Billing address is filled from the branch choice when it is the address the
+  order uses, so its required fields cannot stall the checkout.
+- The confirmed branch is stamped onto the order in `addOrder/before`, and both
+  the order address and the draft shipment are now skipped when the shopper
+  switches to pickup or a courier after picking a branch (previously a leftover
+  session pick produced a bogus Nova Poshta draft and address).
+
 ### 1.2.1
 - Verified clean rendering on the stock OpenCart 4.1.x `basic` theme (default appearance, `Auto` block theme).
 - Repository synced to the production codebase (git was previously lagging at 1.1.0 while 1.2.x shipped to the marketplace).

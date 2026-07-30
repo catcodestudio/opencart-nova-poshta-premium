@@ -1,10 +1,16 @@
 (() => {
   const cfg = window.__novaPoshtaPremium;
-  if (!cfg || window.__npPickerMounted) return;
+  if (!cfg || window.__npPickerBooted) return;
+  window.__npPickerBooted = true;
 
-  // Storefront checkout only — never the cart or other pages.
+  // Storefront checkout only — never the cart or other pages. The query-string
+  // route is absent when SEO URLs are on, so also accept the checkout accordion
+  // markup as proof we are on the right page.
   const route = new URLSearchParams(location.search).get('route') || '';
-  if (route !== 'checkout/checkout') return;
+  const isCheckout = () => route === 'checkout/checkout'
+    || !!document.getElementById('collapse-checkout-option')
+    || !!document.getElementById('collapse-shipping-method');
+  if (!isCheckout()) return;
 
   const accent = /^#[0-9a-fA-F]{6}$/.test(cfg.accentColor || '') ? cfg.accentColor : '#da291c';
   // Corner radius is merchant-configurable so the widget matches the host
@@ -128,19 +134,25 @@
   // AJAX. We inject the widget at the top of the Delivery Details step once its
   // address form is present; if the customer keeps "delivery = billing" we fall
   // back to the Delivery Method step (always present for shippable carts).
+  // Never the Payment Address step: that one is billing data, and asking for a
+  // Nova Poshta branch there makes no sense when the customer picks self-pickup.
+  // A step must be loaded *and* on screen to host the widget. OpenCart renders
+  // the Delivery Details step into the page even when the customer keeps
+  // "delivery = billing" — it just never opens it. Mounting there would hide the
+  // branch picker completely, which is what pushes merchants into bolting a
+  // manual "branch number" field onto the billing step.
+  const isUsable = (node) => !!node
+    && !!node.querySelector('input, select, .form-group, .radio')
+    && node.offsetParent !== null;
+
   const mount = () => {
-    const anchors = ['#collapse-shipping-address', '#collapse-shipping-method', '#collapse-payment-address'];
-    for (const sel of anchors) {
-      const node = document.querySelector(sel);
-      if (!node) continue;
-      // Require the step's AJAX content to have actually loaded.
-      if (!node.querySelector('input, select, .form-group, .radio')) continue;
-      if (node.contains(wrap)) return true;
-      node.insertBefore(wrap, node.firstChild);
-      document.head.appendChild(style);
-      return true;
-    }
-    return false;
+    const anchors = ['#collapse-shipping-address', '#collapse-shipping-method'];
+    const host = anchors.map((s) => document.querySelector(s)).find(isUsable);
+    if (!host) return false;
+    if (host.contains(wrap)) return true;
+    host.insertBefore(wrap, host.firstChild);
+    if (!style.isConnected) document.head.appendChild(style);
+    return true;
   };
 
   // --- state ---
@@ -161,6 +173,16 @@
     postcode: '#input-shipping-postcode',
     country:  '#input-shipping-country',
     zone:     '#input-shipping-zone',
+  };
+  // When the customer leaves "delivery address = billing address" checked, the
+  // Delivery Details step never renders, so the fields above do not exist and
+  // the *billing* address carries the order. Mirror the NP choice into those.
+  const NATIVE_PAYMENT = {
+    address1: '#input-payment-address-1',
+    city:     '#input-payment-city',
+    postcode: '#input-payment-postcode',
+    country:  '#input-payment-country',
+    zone:     '#input-payment-zone',
   };
   const q1 = (s) => document.querySelector(s);
   const setVal = (el, v) => {
@@ -187,22 +209,33 @@
   };
 
   // Keep the (hidden) native fields valid so checkout never blocks on them.
-  const fillNativeAddress = () => {
-    const country = q1(NATIVE.country);
+  const fillMap = (map) => {
+    const country = q1(map.country);
     if (country && country.value !== '220') {
       const opt = [...country.options].find((o) => /Україна|Ukraine/i.test(o.text));
       if (opt) { country.value = opt.value; country.dispatchEvent(new Event('change', { bubbles: true })); }
     }
-    const zone = q1(NATIVE.zone);
+    const zone = q1(map.zone);
     if (zone) {
       let opt = cityArea && [...zone.options].find((o) => o.value && o.text.includes(cityArea));
       if (!opt) opt = [...zone.options].find((o) => o.value && /Київ/.test(o.text));
       if (!opt) opt = [...zone.options].find((o) => o.value);
       if (opt && zone.value !== opt.value) { zone.value = opt.value; zone.dispatchEvent(new Event('change', { bubbles: true })); }
     }
-    setVal(q1(NATIVE.city),     cityName || 'Україна');
-    setVal(q1(NATIVE.address1), whHidden().dataset.name || whHidden().value || 'Нова Пошта');
-    setVal(q1(NATIVE.postcode), '00000');
+    setVal(q1(map.city),     cityName || 'Україна');
+    setVal(q1(map.address1), whHidden().dataset.name || whHidden().value || 'Нова Пошта');
+    setVal(q1(map.postcode), '00000');
+  };
+
+  const fillNativeAddress = () => {
+    fillMap(NATIVE);
+    // Also mirror into the billing form whenever it is the address the order
+    // will actually use (delivery = billing), so its required Address 1 is
+    // never left empty — that is what silently blocked the Payment step.
+    const sameAsBilling = q1('input[name="shipping_address"]');
+    if (!q1(NATIVE.address1) || (sameAsBilling && sameAsBilling.checked)) {
+      fillMap(NATIVE_PAYMENT);
+    }
   };
 
   const cityInput = () => wrap.querySelector('#np-city-q');
@@ -359,23 +392,33 @@
     }).catch(() => {});
   };
 
+  let bound = false;
+
   const init = () => {
-    if (window.__npPickerMounted) return;
+    // A step that reloads over AJAX throws our widget out of the DOM, so
+    // "already mounted" must be re-checked against the live document instead of
+    // latched in a flag — otherwise the picker disappears for good. Being in the
+    // DOM is not enough either: if the step we landed in got collapsed, move to
+    // whichever step is on screen now.
+    if (wrap.isConnected && wrap.offsetParent !== null) return;
     if (!mount()) return;
     window.__npPickerMounted = true;
     hideNativeAddress();
-    bind();
+    if (!bound) { bind(); bound = true; }
     restore();
   };
 
   // OC3 loads each checkout step via AJAX, so the delivery step may not exist at
-  // page load — observe the DOM and mount as soon as it appears.
+  // page load — observe the DOM and re-mount whenever a step is (re)rendered.
   const startObserver = () => {
     init();
-    if (window.__npPickerMounted) return;
+    let queued = false;
     const observer = new MutationObserver(() => {
-      init();
-      if (window.__npPickerMounted) observer.disconnect();
+      if (queued) return;
+      queued = true;
+      // Coalesce the burst of mutations a step reload produces, and let
+      // OpenCart finish writing the step before we re-insert the widget.
+      setTimeout(() => { queued = false; init(); }, 60);
     });
     observer.observe(document.body, { childList: true, subtree: true });
   };
