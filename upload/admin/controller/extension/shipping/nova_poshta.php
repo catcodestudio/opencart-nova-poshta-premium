@@ -124,22 +124,19 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 			KEY `updated_at` (`updated_at`)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-		// Register events (OC3 positional addEvent; triggers app-prefixed).
-		$this->load->model('setting/event');
-		foreach ($this->eventCodes() as $code) {
-			$this->model_setting_event->deleteEventByCode($code);
-		}
-		$this->model_setting_event->addEvent('np_premium_order_added', 'catalog/model/checkout/order/addOrder/after', 'extension/shipping/nova_poshta/orderAdded', 1, 10);
-		$this->model_setting_event->addEvent('np_premium_order_before', 'catalog/model/checkout/order/addOrder/before', 'extension/shipping/nova_poshta/addOrderBefore', 1, 10);
-		$this->model_setting_event->addEvent('np_premium_order_history', 'catalog/model/checkout/order/addOrderHistory/after', 'extension/shipping/nova_poshta/orderHistoryAdded', 1, 10);
-		$this->model_setting_event->addEvent('np_premium_footer_inject', 'catalog/view/common/footer/after', 'extension/shipping/nova_poshta/footerInject', 1, 10);
-		// The branch is chosen in the delivery step, after OpenCart's address step
-		// has already validated its required Address 1 — keep that hidden field
-		// filled so a hidden-field error can never stall the checkout.
-		$this->model_setting_event->addEvent('np_premium_addr_guest', 'catalog/controller/checkout/guest/save/before', 'extension/shipping/nova_poshta/addressPresave', 1, 10);
-		$this->model_setting_event->addEvent('np_premium_addr_register', 'catalog/controller/checkout/register/save/before', 'extension/shipping/nova_poshta/addressPresave', 1, 10);
-		$this->model_setting_event->addEvent('np_premium_addr_payment', 'catalog/controller/checkout/payment_address/save/before', 'extension/shipping/nova_poshta/addressPresave', 1, 10);
-		$this->model_setting_event->addEvent('np_premium_addr_shipping', 'catalog/controller/checkout/shipping_address/save/before', 'extension/shipping/nova_poshta/addressPresave', 1, 10);
+		// The address events keep the hidden Address 1 filled: the branch is chosen
+		// in the delivery step, after OpenCart's address step has already validated
+		// it, so a store that hides those fields would otherwise dead-end there.
+		$this->registerEvents(array(
+			array('np_premium_order_added',   'catalog/model/checkout/order/addOrder/after',                  'orderAdded'),
+			array('np_premium_order_before',  'catalog/model/checkout/order/addOrder/before',                 'addOrderBefore'),
+			array('np_premium_order_history', 'catalog/model/checkout/order/addOrderHistory/after',           'orderHistoryAdded'),
+			array('np_premium_footer_inject', 'catalog/view/common/footer/after',                             'footerInject'),
+			array('np_premium_addr_guest',    'catalog/controller/checkout/guest/save/before',                'addressPresave'),
+			array('np_premium_addr_register', 'catalog/controller/checkout/register/save/before',              'addressPresave'),
+			array('np_premium_addr_payment',  'catalog/controller/checkout/payment_address/save/before',       'addressPresave'),
+			array('np_premium_addr_shipping', 'catalog/controller/checkout/shipping_address/save/before',      'addressPresave'),
+		));
 
 		// Grant access+modify on our admin routes to the current user group.
 		$this->load->model('user/user_group');
@@ -148,6 +145,31 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 				$this->model_user_user_group->addPermission((int)$this->user->getGroupId(), 'access', $route);
 				$this->model_user_user_group->addPermission((int)$this->user->getGroupId(), 'modify', $route);
 			} catch (\Exception $e) {}
+		}
+	}
+
+	/**
+	 * Replace our event rows.
+	 *
+	 * Deliberately not `model_setting_event->addEvent()`: forks and rebadged OC3
+	 * builds change that method's signature, and when it fails after our
+	 * delete-by-code pass the extension is left with NO events at all — the
+	 * checkout widget and order hooks silently stop firing. Writing the rows
+	 * ourselves keeps install() self-contained and idempotent. The model is still
+	 * used for deletion, with a SQL fallback for the same reason.
+	 */
+	private function registerEvents(array $events) {
+		$prefix = DB_PREFIX;
+		foreach ($events as $e) {
+			list($code, $trigger, $method) = $e;
+			$action = 'extension/shipping/nova_poshta/' . $method;
+			$this->db->query("DELETE FROM `" . $prefix . "event` WHERE `code` = '" . $this->db->escape($code) . "'");
+			$this->db->query("INSERT INTO `" . $prefix . "event` SET
+				`code` = '" . $this->db->escape($code) . "',
+				`trigger` = '" . $this->db->escape($trigger) . "',
+				`action` = '" . $this->db->escape($action) . "',
+				`status` = 1,
+				`sort_order` = 10");
 		}
 	}
 
@@ -166,9 +188,8 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 	}
 
 	public function uninstall() {
-		$this->load->model('setting/event');
 		foreach ($this->eventCodes() as $code) {
-			try { $this->model_setting_event->deleteEventByCode($code); } catch (\Exception $e) {}
+			$this->db->query("DELETE FROM `" . DB_PREFIX . "event` WHERE `code` = '" . $this->db->escape($code) . "'");
 		}
 		// Tables preserved on uninstall to avoid losing shipment history.
 	}

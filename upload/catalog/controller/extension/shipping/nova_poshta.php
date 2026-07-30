@@ -161,7 +161,7 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 
 	/** view/common/footer/after — inject picker widget before </body>. */
 	public function footerInject(&$route, &$data, &$output) {
-		if (!is_string($output) || stripos($output, '</body>') === false) {
+		if (!is_string($output)) {
 			return;
 		}
 		$baseUrl = defined('HTTPS_SERVER') ? HTTPS_SERVER : HTTP_SERVER;
@@ -191,7 +191,15 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 		$jsonEndpoints = json_encode($endpoints, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE);
 		$pickerJs = $this->pickerScript();
 		$tag = '<script>window.__novaPoshtaPremium=' . $jsonEndpoints . ';' . $pickerJs . '</script>';
-		$output = str_replace('</body>', $tag . '</body>', $output);
+		// Plenty of third-party OC3 themes never emit a closing </body> (their
+		// footer template simply ends), and anchoring on it silently dropped the
+		// widget on those stores. Fall back to appending: this handler runs on the
+		// footer template, so the end of its output is the end of the page.
+		if (stripos($output, '</body>') !== false) {
+			$output = str_replace('</body>', $tag . '</body>', $output);
+		} else {
+			$output .= $tag;
+		}
 	}
 
 	private function pickerScript() {
