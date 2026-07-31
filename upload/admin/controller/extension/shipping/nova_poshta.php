@@ -235,6 +235,14 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 		$data['back']               = $this->url->link('marketplace/extension', 'user_token=' . $ut . '&type=shipping', true);
 		$data['user_token']         = $ut;
 
+		// OC3 url->link() HTML-escapes the ampersands. That is fine inside href
+		// attributes, but these URLs are also used as $.ajax() endpoints, where
+		// "&amp;user_token=" arrives as the parameter "amp;user_token" and the
+		// request is bounced to the login page (jQuery then reports parsererror).
+		foreach (array('save', 'test', 'search_cities', 'get_warehouses', 'quote_preview', 'setup_url', 'url_license_check', 'url_license_off', 'url_counterparties', 'url_contacts') as $ajax_key) {
+			$data[$ajax_key] = str_replace('&amp;', '&', $data[$ajax_key]);
+		}
+
 		// Cron URL hints (merchant adds these to system crontab).
 		$base = defined('HTTPS_CATALOG') ? HTTPS_CATALOG : (defined('HTTP_CATALOG') ? HTTP_CATALOG : '');
 		$data['cron_poll']    = $base . 'index.php?route=extension/shipping/nova_poshta/pollStatus';

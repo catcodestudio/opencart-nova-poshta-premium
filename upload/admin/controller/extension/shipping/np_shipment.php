@@ -52,7 +52,9 @@ class ControllerExtensionShippingNpShipment extends Controller {
 		$data['breadcrumbs'][] = array('text' => $this->language->get('heading_title'), 'href' => $this->url->link('extension/shipping/np_shipment', 'user_token=' . $ut, true));
 
 		$data['back']     = $this->url->link('extension/shipping/nova_poshta', 'user_token=' . $ut, true);
-		$data['sync_url'] = $this->url->link('extension/shipping/np_shipment/syncCod', 'user_token=' . $ut, true);
+		// Used as an $.ajax() endpoint, so the ampersands must stay unescaped —
+		// see the same fix in the nova_poshta controller.
+		$data['sync_url'] = str_replace('&amp;', '&', $this->url->link('extension/shipping/np_shipment/syncCod', 'user_token=' . $ut, true));
 
 		$data['header']      = $this->load->controller('common/header');
 		$data['column_left'] = $this->load->controller('common/column_left');
