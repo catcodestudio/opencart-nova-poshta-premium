@@ -89,6 +89,14 @@ build.ps1                # Compress-Archive helper
 
 ## Changelog
 
+### 1.2.7 (OpenCart 3.x)
+- **The whole settings page works again.** OpenCart 3.0.x `Url::link()` HTML-escapes
+  ampersands, so every admin AJAX endpoint was rendered as `…&amp;user_token=…`.
+  PHP read the parameter as `amp;user_token`, bounced the request to the login page,
+  and jQuery reported `AJAX error: parsererror` for every button — test connection,
+  save, test quote, install/reinstall, license, sender lookups, city and warehouse
+  pickers, and the COD sync on the shipments page.
+
 ### 1.2.6 (OpenCart 3.x)
 - **Checkout no longer dead-ends on the address step.** OpenCart validates a
   required Address 1 before the delivery method is known, so stores that hide the
