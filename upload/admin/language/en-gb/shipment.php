@@ -16,3 +16,6 @@ $_['button_return']     = 'Create return TTN';
 $_['text_awaiting_payout'] = 'awaiting payout';
 $_['text_confirm_return']  = 'Create return TTN for this shipment?';
 $_['text_failed']          = 'Operation failed';
+$_['text_pro_badge']             = 'Pro';
+$_['text_pro_benefit_shipments'] = 'Pro: return waybills in one click and cash-on-delivery payout reconciliation against Nova Poshta. Creating waybills and this list work without a licence.';
+$_['button_try_pro']             = 'Try Pro free';

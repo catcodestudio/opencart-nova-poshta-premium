@@ -51,6 +51,12 @@ class Shipment extends \Opencart\System\Engine\Controller {
 		$data['back']      = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta', 'user_token=' . $ut);
 		$data['sync_url']  = $this->url->link('extension/nova_poshta_premium/shipment.syncCod', 'user_token=' . $ut);
 
+		// Return TTN and COD reconciliation are Pro. The buttons stay on screen
+		// but disabled, so the merchant can see what a licence adds instead of
+		// finding out only after clicking.
+		$data['is_pro']    = \Opencart\System\Library\NovaPoshta\License::isPro($this->config);
+		$data['settings_url'] = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta', 'user_token=' . $ut);
+
 		$data['header']      = $this->load->controller('common/header');
 		$data['column_left'] = $this->load->controller('common/column_left');
 		$data['footer']      = $this->load->controller('common/footer');

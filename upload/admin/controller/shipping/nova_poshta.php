@@ -282,6 +282,28 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		$data['shipping_nova_poshta_license_status']       = \Opencart\System\Library\NovaPoshta\License::describe($this->config);
 		$data['shipping_nova_poshta_license_is_pro']       = \Opencart\System\Library\NovaPoshta\License::isPro($this->config);
 
+		$license = '\Opencart\System\Library\NovaPoshta\License';
+
+		$data['is_pro']          = $license::isPro($this->config);
+		$data['has_license']     = $license::hasKey($this->config);
+		$data['trial_available'] = $license::trialAvailable($this->config);
+		$data['trial_active']    = $license::trialActive($this->config);
+		$data['trial_days_left'] = $license::trialDaysLeft($this->config);
+		$data['license_expires'] = $license::expiresAt($this->config);
+		$data['license_verdict'] = (string)$this->config->get('shipping_nova_poshta_license_status');
+		$data['url_license_trial']      = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.licenseTrial', 'user_token=' . $this->session->data['user_token']);
+		$data['url_license_deactivate'] = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.licenseDeactivate', 'user_token=' . $this->session->data['user_token']);
+		$data['url_dismiss_notice']  = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.dismissNotice', 'user_token=' . $this->session->data['user_token']);
+		$data['buy_url']         = 'https://catcode.com.ua/modules/opencart-nova-poshta-premium/';
+
+		// The single nudge: shown once the module is actually carrying orders
+		// (switched on and an API key saved), never on a bare install, and
+		// never again once closed.
+		$data['show_notice'] = !$data['is_pro']
+			&& (string)$this->config->get('shipping_nova_poshta_notice_dismissed') !== '1'
+			&& (string)$this->config->get('shipping_nova_poshta_status') === '1'
+			&& trim((string)$this->config->get('shipping_nova_poshta_api_key')) !== '';
+
 		$this->load->model('localisation/tax_class');
 		$data['tax_classes'] = $this->model_localisation_tax_class->getTaxClasses();
 
@@ -515,7 +537,11 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 
 				if (!empty($result['ok'])) {
 					$tpl = $this->language->get('text_license_ok');
-					$json['success'] = sprintf($tpl, (string)($result['product_name'] ?? ''));
+					// The product name comes from WordPress, which stores it
+					// HTML-encoded (`3.x &#038; 4.x`). The UI sets it as plain
+					// text, so decode or the entity shows up verbatim.
+					$name = html_entity_decode((string)($result['product_name'] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+					$json['success'] = sprintf($tpl, $name);
 				} else {
 					$err = (string)($result['error'] ?? 'unknown');
 					// Map server error codes to localized messages where we have them.
@@ -528,6 +554,66 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 				}
 			}
 		}
+		$this->jsonResponse($json);
+	}
+
+	/**
+	 * "Try 7 days free": mint a real trial licence for this shop and activate
+	 * it. Nothing here runs on its own — the merchant has to type an e-mail and
+	 * click, which is the whole point of the redesign.
+	 */
+	public function licenseTrial(): void {
+		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');
+		$json = [];
+
+		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
+			$json['error'] = $this->language->get('error_permission');
+			$this->jsonResponse($json);
+			return;
+		}
+
+		$this->load->model('setting/setting');
+
+		$result = \Opencart\System\Library\NovaPoshta\License::startTrial(
+			$this->config,
+			$this->model_setting_setting,
+			(string)($this->request->post['email'] ?? '')
+		);
+
+		if (!empty($result['ok'])) {
+			$json['success']    = $this->language->get('text_trial_started');
+			$json['key']        = (string)($result['key'] ?? '');
+			$json['expires_at'] = (string)($result['expires_at'] ?? '');
+		} else {
+			$code = (string)($result['error'] ?? 'unknown');
+			$msgKey = 'text_license_err_' . $code;
+			$msg    = $this->language->get($msgKey);
+			if ($msg === $msgKey) {
+				$msg = trim((string)($result['message'] ?? '')) ?: $this->language->get('text_license_bad') . ' (' . $code . ')';
+			}
+			$json['error'] = $msg;
+		}
+
+		$this->jsonResponse($json);
+	}
+
+	/** Close the Pro nudge for good. */
+	public function dismissNotice(): void {
+		$json = [];
+
+		if (!$this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
+			$json['error'] = 'forbidden';
+			$this->jsonResponse($json);
+			return;
+		}
+
+		$this->load->model('setting/setting');
+		$current = $this->model_setting_setting->getSetting('shipping_nova_poshta');
+		if (!is_array($current)) { $current = []; }
+		$current['shipping_nova_poshta_notice_dismissed'] = '1';
+		$this->model_setting_setting->editSetting('shipping_nova_poshta', $current);
+
+		$json['success'] = '1';
 		$this->jsonResponse($json);
 	}
 

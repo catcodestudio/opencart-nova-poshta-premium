@@ -3,7 +3,7 @@
   <div class="page-header">
     <div class="container-fluid">
       <div class="float-end">
-        <button type="button" id="button-sync-cod" data-url="{{ sync_url }}" data-bs-toggle="tooltip" title="{{ button_sync_cod }}" class="btn btn-info"><i class="fa-solid fa-money-bill-transfer"></i></button>
+        <button type="button" id="button-sync-cod" data-url="{{ sync_url }}" data-bs-toggle="tooltip" title="{{ button_sync_cod }}{% if not is_pro %} — {{ text_pro_badge }}{% endif %}" class="btn btn-info"{% if not is_pro %} disabled{% endif %}><i class="fa-solid fa-money-bill-transfer"></i></button>
         <a href="{{ back }}" data-bs-toggle="tooltip" title="{{ button_back }}" class="btn btn-light"><i class="fa-solid fa-reply"></i></a>
       </div>
       <h1>{{ heading_title }}</h1>
@@ -15,6 +15,13 @@
     </div>
   </div>
   <div class="container-fluid">
+    {% if not is_pro %}
+    <div class="alert alert-warning d-flex flex-wrap align-items-center gap-2">
+      <span class="badge bg-warning text-dark">{{ text_pro_badge }}</span>
+      <span class="flex-grow-1 small">{{ text_pro_benefit_shipments }}</span>
+      <a href="{{ settings_url }}" class="btn btn-primary btn-sm text-nowrap">{{ button_try_pro }}</a>
+    </div>
+    {% endif %}
     <div class="card">
       <div class="card-header"><i class="fa-solid fa-truck"></i> {{ text_list }} <span id="sync-result" class="ms-3 small"></span></div>
       <div class="card-body">
@@ -72,7 +79,7 @@
                 <td>{{ s.created_at }}</td>
                 <td>
                   {% if s.int_doc_number and not s.return_ttn %}
-                    <button type="button" class="btn btn-sm btn-outline-warning button-return" data-url="{{ s.return_url }}" title="{{ button_return }}"><i class="fa-solid fa-rotate-left"></i></button>
+                    <button type="button" class="btn btn-sm btn-outline-warning button-return" data-url="{{ s.return_url }}" title="{{ button_return }}{% if not is_pro %} — {{ text_pro_badge }}{% endif %}"{% if not is_pro %} disabled{% endif %}><i class="fa-solid fa-rotate-left"></i></button>
                   {% endif %}
                 </td>
               </tr>

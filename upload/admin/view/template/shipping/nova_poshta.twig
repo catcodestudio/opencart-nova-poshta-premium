@@ -15,6 +15,14 @@
     </div>
   </div>
   <div class="container-fluid">
+    {% if show_notice %}
+    <div class="alert alert-info alert-dismissible d-flex align-items-center gap-3" id="np-notice">
+      <i class="fa-solid fa-circle-info"></i>
+      <div class="flex-grow-1">{{ text_notice_pro }}</div>
+      <button type="button" class="btn btn-primary btn-sm text-nowrap" data-bs-toggle="modal" data-bs-target="#modal-np-pro">{{ button_try_pro }}</button>
+      <button type="button" class="btn-close" id="np-notice-close" data-url="{{ url_dismiss_notice }}" aria-label="Close"></button>
+    </div>
+    {% endif %}
     <div class="card">
       <div class="card-header"><i class="fa-solid fa-pencil"></i> {{ text_edit }}</div>
       <div class="card-body">
@@ -202,17 +210,24 @@
 
           <h5 class="text-muted mb-3 mt-4"><i class="fa-solid fa-certificate"></i> {{ text_section_license }}</h5>
           <div class="row mb-3">
-            <label for="input-license-key" class="col-sm-2 col-form-label">{{ entry_license_key }}</label>
+            <label class="col-sm-2 col-form-label">{{ entry_license_key }}</label>
             <div class="col-sm-10">
-              <div class="input-group">
-                <input type="text" name="shipping_nova_poshta_license_key" value="{{ shipping_nova_poshta_license_key }}" placeholder="XXXX-XXXX-XXXX-XXX" id="input-license-key" class="form-control" autocomplete="off"/>
-                <button type="button" id="button-license" data-url="{{ url_license_check }}" class="btn btn-outline-secondary"><i class="fa-solid fa-shield-halved"></i> {{ button_license }}</button>
-              </div>
-              <div id="license-result" class="form-text">
-                {% if shipping_nova_poshta_license_status %}
-                  {{ text_license_current_status }} <strong>{{ shipping_nova_poshta_license_status }}</strong>
+              <div class="d-flex flex-wrap align-items-center gap-2">
+                {% if is_pro %}
+                  <span class="badge bg-success">
+                    {% if trial_active %}{{ text_license_trial|format(trial_days_left) }}{% else %}{{ text_license_valid }}{% endif %}
+                  </span>
+                  {% if license_expires %}<span class="text-muted small">{{ text_license_expires|format(license_expires) }}</span>{% endif %}
+                  <button type="button" id="button-license-off" data-url="{{ url_license_deactivate }}" class="btn btn-outline-secondary btn-sm">{{ button_license_off }}</button>
+                {% else %}
+                  <span class="badge bg-secondary">{{ text_license_free }}</span>
+                  {% if has_license %}
+                    <span class="text-danger small">{{ license_verdict == 'invalid' ? text_license_invalid : text_license_unchecked }}</span>
+                  {% endif %}
+                  <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modal-np-pro">{{ button_try_pro }}</button>
                 {% endif %}
               </div>
+              <div id="license-result" class="form-text">{{ text_license_help }}</div>
             </div>
           </div>
         </form>
@@ -220,6 +235,43 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="modal-np-pro" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">{{ text_modal_title }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <ul class="nav nav-pills nav-fill mb-3" role="tablist">
+          <li class="nav-item"><a class="nav-link{{ trial_available ? ' active' : '' }}" href="#np-pane-trial" data-bs-toggle="tab">{{ text_modal_tab_trial }}</a></li>
+          <li class="nav-item"><a class="nav-link{{ trial_available ? '' : ' active' }}" href="#np-pane-key" data-bs-toggle="tab">{{ text_modal_tab_key }}</a></li>
+        </ul>
+
+        <div id="np-modal-alert"></div>
+
+        <div class="tab-content">
+          <div class="tab-pane{{ trial_available ? ' active' : '' }}" id="np-pane-trial">
+            <p class="small text-muted">{{ text_modal_trial_intro }}</p>
+            <label class="form-label" for="np-trial-email">{{ entry_email }}</label>
+            <input type="email" class="form-control mb-3" id="np-trial-email" placeholder="you@example.com"/>
+            <button type="button" class="btn btn-primary w-100" id="np-trial-go" data-url="{{ url_license_trial }}">{{ button_start_trial }}</button>
+          </div>
+
+          <div class="tab-pane{{ trial_available ? '' : ' active' }}" id="np-pane-key">
+            <p class="small text-muted">{{ text_modal_key_intro }}</p>
+            <label class="form-label" for="input-license-key">{{ entry_license_key }}</label>
+            <input type="text" class="form-control mb-3" id="input-license-key" value="{{ shipping_nova_poshta_license_key }}" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off"/>
+            <button type="button" class="btn btn-primary w-100 mb-2" id="button-license" data-url="{{ url_license_check }}">{{ button_license }}</button>
+            <a href="{{ buy_url }}" target="_blank" rel="noopener" class="btn btn-link w-100 btn-sm">{{ text_modal_buy }}</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 (() => {
   const setResult = (el, msg, cls) => { el.textContent = msg; el.className = 'form-text ' + cls; };
@@ -386,14 +438,69 @@
   const btnLicense = document.getElementById('button-license');
   if (btnLicense) {
     btnLicense.addEventListener('click', () => {
-      const url = btnLicense.dataset.url;
-      const key = document.getElementById('input-license-key').value.trim();
-      const r = document.getElementById('license-result');
-      r.textContent = '...'; r.className = 'form-text text-muted';
-      post(url, {shipping_nova_poshta_license_key: key}).then(d => {
-        r.textContent = d.success || d.error;
-        r.className = 'form-text ' + (d.success ? 'text-success' : 'text-danger');
+      licenseCall(btnLicense, btnLicense.dataset.url, {
+        shipping_nova_poshta_license_key: document.getElementById('input-license-key').value.trim()
       });
+    });
+  }
+
+  // Every licence action ends in a reload: the Pro gate is rendered
+  // server-side (disabled buttons, badges), so re-drawing it here would only
+  // risk the two views disagreeing about what is unlocked.
+  const modalAlert = document.getElementById('np-modal-alert');
+
+  const modalNotify = (type, msg) => {
+    if (modalAlert) {
+      modalAlert.innerHTML = '<div class="alert alert-' + type + ' py-2 small"></div>';
+      modalAlert.firstChild.textContent = msg;
+    }
+  };
+
+  function licenseCall(button, url, body) {
+    const label = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    post(url, body)
+      .then(d => {
+        if (d.error) {
+          button.disabled = false;
+          button.innerHTML = label;
+          modalNotify('danger', d.error);
+          return;
+        }
+        modalNotify('success', d.success);
+        window.location.reload();
+      })
+      .catch(e => {
+        button.disabled = false;
+        button.innerHTML = label;
+        modalNotify('danger', e.message);
+      });
+  }
+
+  const btnTrial = document.getElementById('np-trial-go');
+  if (btnTrial) {
+    btnTrial.addEventListener('click', () => {
+      licenseCall(btnTrial, btnTrial.dataset.url, {email: document.getElementById('np-trial-email').value.trim()});
+    });
+  }
+
+  const btnOff = document.getElementById('button-license-off');
+  if (btnOff) {
+    btnOff.addEventListener('click', () => {
+      if (!confirm('{{ text_confirm_deactivate|escape('js') }}')) { return; }
+      licenseCall(btnOff, btnOff.dataset.url, null);
+    });
+  }
+
+  // The nudge is closed for good, not until the next page load.
+  const noticeClose = document.getElementById('np-notice-close');
+  if (noticeClose) {
+    noticeClose.addEventListener('click', () => {
+      const notice = document.getElementById('np-notice');
+      if (notice) { notice.remove(); }
+      post(noticeClose.dataset.url).catch(() => {});
     });
   }
 })();
