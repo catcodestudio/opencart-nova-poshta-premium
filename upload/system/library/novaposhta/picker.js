@@ -48,6 +48,7 @@
   .np-opt:hover,.np-opt.is-active{background:color-mix(in srgb,var(--np-accent) 10%,transparent);}
   .np-opt--muted{color:var(--np-muted);cursor:default;text-align:center;}
   .np-opt--head{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--np-muted);cursor:default;background:var(--np-soft);padding:7px 13px;}
+  .np-summary[hidden]{display:none!important;}
   .np-summary{display:inline-flex;align-items:center;gap:8px;margin-top:14px;padding:9px 13px;font-size:13px;font-weight:600;color:var(--np-accent);background:color-mix(in srgb,var(--np-accent) 9%,transparent);border-radius:calc(var(--np-radius) * .65);}
   .np-spin{display:inline-block;width:15px;height:15px;border:2px solid color-mix(in srgb,var(--np-accent) 28%,transparent);border-top-color:var(--np-accent);border-radius:50%;animation:np-spin .6s linear infinite;vertical-align:middle;}
   @keyframes np-spin{to{transform:rotate(360deg)}}

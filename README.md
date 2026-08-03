@@ -99,6 +99,14 @@ build.ps1                # Compress-Archive helper
   defaulting to Disabled for both fresh installs and upgrades; the cost field is
   what checkout shows, and the API tariff is used only when the switch is on
   (still falling back to that field if Nova Poshta does not answer).
+- **A zero shipping cost no longer reads as "free delivery".** When the cost comes
+  out at 0 the method is now labelled *(оплата при отриманні)* and priced
+  *за тарифами перевізника* instead of showing `0 ₴` — the suffix goes on the
+  method title as well, because the order totals row reuses it verbatim.
+- **Fixed: an empty pink chip hung under the picker until a warehouse was chosen.**
+  The summary line is toggled with the `hidden` attribute, but `.np-summary`
+  declared `display:inline-flex`, which outranks the user-agent `[hidden]` rule —
+  so the styled-but-empty element stayed on screen.
 
 ### 1.2.7 (OpenCart 3.x)
 - **The whole settings page works again.** OpenCart 3.0.x `Url::link()` HTML-escapes

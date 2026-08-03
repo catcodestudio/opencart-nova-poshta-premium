@@ -47,13 +47,26 @@ class ModelExtensionShippingNovaPoshta extends Model {
 
 		$tax_class_id = (int)$this->config->get('shipping_nova_poshta_tax_class_id');
 
+		// A bare "0 ₴" reads as "delivery is free", which is wrong when the buyer
+		// pays the courier on pickup. Say so instead of printing a zero price —
+		// in the method title too, since the order totals row reuses it.
+		$title = $this->language->get('text_description');
+		if ($cost <= 0) {
+			// Two different wordings on purpose: the title is reused verbatim by
+			// the order totals row, the text sits next to it on the method radio.
+			$title .= ' (' . $this->language->get('text_pay_on_pickup') . ')';
+			$text   = $this->language->get('text_carrier_rate');
+		} else {
+			$text = $this->currency->format($this->tax->calculate($cost, $tax_class_id, $this->config->get('config_tax')), $this->session->data['currency']);
+		}
+
 		$quote_data = array();
 		$quote_data['nova_poshta'] = array(
 			'code'         => 'nova_poshta.nova_poshta',
-			'title'        => $this->language->get('text_description'),
+			'title'        => $title,
 			'cost'         => $cost,
 			'tax_class_id' => $tax_class_id,
-			'text'         => $this->currency->format($this->tax->calculate($cost, $tax_class_id, $this->config->get('config_tax')), $this->session->data['currency'])
+			'text'         => $text
 		);
 
 		return array(
