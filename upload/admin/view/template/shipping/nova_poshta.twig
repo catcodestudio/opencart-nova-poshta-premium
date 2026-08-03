@@ -132,9 +132,20 @@
 
           <h5 class="text-muted mb-3 mt-4"><i class="fa-solid fa-tag"></i> {{ text_section_pricing }}</h5>
           <div class="row mb-3">
+            <label class="col-sm-2 col-form-label">{{ entry_live_rate }}</label>
+            <div class="col-sm-10">
+              <div class="form-check form-switch form-switch-lg">
+                <input type="hidden" name="shipping_nova_poshta_live_rate" value="0"/>
+                <input type="checkbox" name="shipping_nova_poshta_live_rate" value="1" id="input-live-rate" class="form-check-input"{% if shipping_nova_poshta_live_rate %} checked{% endif %}/>
+              </div>
+              <div class="form-text">{{ help_live_rate }}</div>
+            </div>
+          </div>
+          <div class="row mb-3">
             <label for="input-default-cost" class="col-sm-2 col-form-label">{{ entry_default_cost }}</label>
             <div class="col-sm-10">
               <input type="text" name="shipping_nova_poshta_default_cost" value="{{ shipping_nova_poshta_default_cost }}" placeholder="0.00" id="input-default-cost" class="form-control"/>
+              <div class="form-text">{{ help_default_cost }}</div>
             </div>
           </div>
 

@@ -30,7 +30,10 @@ $_['text_no_results']   = 'Nothing found';
 $_['text_pick_city']    = 'Pick a city to see its warehouses';
 
 $_['entry_api_key']         = 'Nova Poshta API key';
-$_['entry_default_cost']    = 'Fallback shipping cost (if API is down)';
+$_['entry_live_rate']       = 'Live rate calculation via API';
+$_['help_live_rate']        = 'Disabled (default) — checkout shows the cost from the field below. Enabled — the module asks Nova Poshta for the real tariff for the city the customer picked, falling back to the field below if the API does not answer.';
+$_['entry_default_cost']    = 'Shipping cost';
+$_['help_default_cost']     = 'Shown at checkout. Set 0 if delivery is paid to the carrier on pickup.';
 $_['entry_accent_color']    = 'Accent colour';
 $_['help_accent_color']     = 'Colour of the checkout delivery block heading and active elements — match it to your store palette.';
 $_['entry_radius']          = 'Corner radius';

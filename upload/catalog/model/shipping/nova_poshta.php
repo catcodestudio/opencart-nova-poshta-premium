@@ -26,8 +26,11 @@ class NovaPoshta extends \Opencart\System\Engine\Model {
 		$key          = \Opencart\System\Library\NovaPoshta\Crypto::decrypt((string)$this->config->get('shipping_nova_poshta_api_key'));
 		$defaultCost  = (float)$this->config->get('shipping_nova_poshta_default_cost');
 		$cost         = $defaultCost;
+		// Opt-in: unset (fresh install / upgrade from an older build) means OFF, so
+		// the merchant's flat cost is never silently replaced by a carrier tariff.
+		$liveRate     = (int)$this->config->get('shipping_nova_poshta_live_rate');
 
-		if ($key !== '' && $senderCity !== '' && $recipientCity !== '') {
+		if ($liveRate && $key !== '' && $senderCity !== '' && $recipientCity !== '') {
 			$weight = $this->cartWeightKg();
 			$value  = $this->cartValue();
 			$client = new \Opencart\System\Library\NovaPoshta\Client($key);

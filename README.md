@@ -81,6 +81,17 @@ build.ps1                # Compress-Archive helper
 
 ## Changelog
 
+### 1.2.16
+- **Live rate calculation is now opt-in and off by default.** Until now the module
+  always replaced the merchant's cost with the carrier tariff from
+  `InternetDocument.getDocumentPrice` as soon as an API key and a sender city were
+  configured — stores that wanted "paid to the carrier on pickup" had no way to turn
+  that off, and the cost field (previously labelled *Fallback shipping cost*) looked
+  like it was being ignored. Pricing now has a **Live rate calculation via API**
+  switch, defaulting to off for both fresh installs and upgrades; the cost field is
+  what checkout shows, and the API tariff is used only when the switch is on
+  (still falling back to that field if Nova Poshta does not answer).
+
 ### 1.2.4
 - Fixed: city search failed with an SQL syntax error on stores running the **PDO** database driver (`DB_DRIVER = pdo`). On that driver OpenCart's `escape()` returns a bound placeholder rather than an escaped string, so appending a `%` wildcard inside the quotes produced `LIKE :0%`. Wildcards now go through `escape()` as part of the value, which is correct on both `mysqli` and `pdo`. Warehouse lookup was unaffected, which is why the failure looked like an API key problem.
 
