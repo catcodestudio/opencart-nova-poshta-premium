@@ -41,15 +41,28 @@ class NovaPoshta extends \Opencart\System\Engine\Model {
 		}
 
 		$tax_class_id = (int)$this->config->get('shipping_nova_poshta_tax_class_id');
-		$quote_data['nova_poshta'] = [
-			'code'         => 'nova_poshta.nova_poshta',
-			'name'         => $this->language->get('text_description'),
-			'cost'         => $cost,
-			'tax_class_id' => $tax_class_id,
-			'text'         => $this->currency->format(
+
+		// A bare "0 ₴" reads as "delivery is free", which is wrong when the buyer
+		// pays the courier on pickup. Say so instead of printing a zero price —
+		// two different wordings on purpose: the name is reused verbatim by the
+		// order totals row, the text sits next to it on the method radio.
+		$name = $this->language->get('text_description');
+		if ($cost <= 0) {
+			$name .= ' (' . $this->language->get('text_pay_on_pickup') . ')';
+			$text  = $this->language->get('text_carrier_rate');
+		} else {
+			$text = $this->currency->format(
 				$this->tax->calculate($cost, $tax_class_id, $this->config->get('config_tax')),
 				$this->session->data['currency']
-			),
+			);
+		}
+
+		$quote_data['nova_poshta'] = [
+			'code'         => 'nova_poshta.nova_poshta',
+			'name'         => $name,
+			'cost'         => $cost,
+			'tax_class_id' => $tax_class_id,
+			'text'         => $text,
 		];
 
 		return [
