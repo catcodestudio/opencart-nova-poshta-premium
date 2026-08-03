@@ -253,6 +253,7 @@ class ControllerExtensionShippingNovaPoshta extends Controller {
 
 		$data['shipping_nova_poshta_api_key']               = $this->apiKey();
 		$data['shipping_nova_poshta_default_cost']          = $this->config->get('shipping_nova_poshta_default_cost');
+		$data['shipping_nova_poshta_live_rate']             = (int)$this->config->get('shipping_nova_poshta_live_rate');
 		$data['shipping_nova_poshta_accent_color']          = (string)($this->config->get('shipping_nova_poshta_accent_color') ?: '#da291c');
 		$radiusCfg = $this->config->get('shipping_nova_poshta_radius');
 		$data['shipping_nova_poshta_radius']                = ($radiusCfg === null || $radiusCfg === '') ? 14 : (int)$radiusCfg;

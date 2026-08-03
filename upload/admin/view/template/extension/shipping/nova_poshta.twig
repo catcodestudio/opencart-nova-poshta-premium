@@ -54,6 +54,13 @@
                 </div>
               </div>
               <div class="form-group">
+                <label class="col-sm-2 control-label"><span data-toggle="tooltip" title="{{ help_live_rate }}">{{ entry_live_rate }}</span></label>
+                <div class="col-sm-10"><select name="shipping_nova_poshta_live_rate" class="form-control">
+                  <option value="0"{% if not shipping_nova_poshta_live_rate %} selected{% endif %}>{{ text_disabled }}</option>
+                  <option value="1"{% if shipping_nova_poshta_live_rate %} selected{% endif %}>{{ text_enabled }}</option>
+                </select></div>
+              </div>
+              <div class="form-group">
                 <label class="col-sm-2 control-label"><span data-toggle="tooltip" title="{{ help_default_cost }}">{{ entry_default_cost }}</span></label>
                 <div class="col-sm-10"><input type="text" name="shipping_nova_poshta_default_cost" value="{{ shipping_nova_poshta_default_cost }}" class="form-control"/></div>
               </div>

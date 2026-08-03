@@ -4,8 +4,10 @@ require_once DIR_SYSTEM . 'library/novaposhta/crypto.php';
 
 /**
  * Nova Poshta Premium — shipping quote model (OpenCart 3.0.x).
- * Live rate via InternetDocument.getDocumentPrice; falls back to a flat
- * default cost when the API key or sender city is not configured.
+ * By default the quote is the flat cost from settings (most UA stores let the
+ * customer pay the carrier on pickup). Live rating via
+ * InternetDocument.getDocumentPrice is opt-in per store and still falls back to
+ * the flat cost when the API key or sender city is not configured.
  */
 class ModelExtensionShippingNovaPoshta extends Model {
 	public function getQuote($address) {
@@ -29,8 +31,11 @@ class ModelExtensionShippingNovaPoshta extends Model {
 		$recipientCity = isset($this->session->data['np_recipient_city_ref']) ? (string)$this->session->data['np_recipient_city_ref'] : '';
 		$key           = NpCrypto::decrypt((string)$this->config->get('shipping_nova_poshta_api_key'));
 		$cost          = (float)$this->config->get('shipping_nova_poshta_default_cost');
+		// Opt-in: unset (fresh install / upgrade from <= 1.2.7) means OFF, so the
+		// merchant's flat cost is never silently replaced by a carrier tariff.
+		$liveRate      = (int)$this->config->get('shipping_nova_poshta_live_rate');
 
-		if ($key !== '' && $senderCity !== '' && $recipientCity !== '') {
+		if ($liveRate && $key !== '' && $senderCity !== '' && $recipientCity !== '') {
 			$weight = $this->cartWeightKg();
 			$value  = $this->cartValue();
 			$client = new NpClient($key);

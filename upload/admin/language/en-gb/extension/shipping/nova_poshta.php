@@ -42,7 +42,8 @@ $_['text_license_err_revoked']       = 'This key was disabled. Contact support i
 // Entries
 $_['entry_status']             = 'Status';
 $_['entry_api_key']            = 'Nova Poshta API key';
-$_['entry_default_cost']       = 'Fallback cost';
+$_['entry_live_rate']          = 'Live rate calculation via API';
+$_['entry_default_cost']       = 'Shipping cost';
 $_['entry_geo_zone']           = 'Geo Zone';
 $_['entry_tax_class']          = 'Tax Class';
 $_['entry_sort_order']         = 'Sort Order';
@@ -60,7 +61,8 @@ $_['entry_license_status']     = 'Status';
 
 // Help
 $_['help_api_key']             = 'Free at my.novaposhta.ua → Settings → Security → API. Stored encrypted.';
-$_['help_default_cost']        = 'Used when the live API rate is unavailable.';
+$_['help_live_rate']           = 'Disabled (default) — checkout shows the cost from the field below. Enabled — the module asks Nova Poshta for the real tariff for the city the customer picked, falling back to the field below if the API does not answer.';
+$_['help_default_cost']        = 'Shown at checkout. Set 0 if delivery is paid to the carrier on pickup.';
 $_['help_sender']              = 'Search your city, pick the warehouse, then load your counterparty profile and contact person — required for automatic TTN creation.';
 $_['help_auto_ttn']            = 'When an order reaches this status the TTN is created automatically. Leave as None to create TTNs manually from the shipments dashboard.';
 $_['help_accent_color']        = 'Heading and active-element colour of the checkout block.';

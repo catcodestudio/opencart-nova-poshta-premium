@@ -89,6 +89,17 @@ build.ps1                # Compress-Archive helper
 
 ## Changelog
 
+### 1.2.8 (OpenCart 3.x)
+- **Live rate calculation is now opt-in and off by default.** Until now the module
+  always replaced the merchant's cost with the carrier tariff from
+  `InternetDocument.getDocumentPrice` as soon as an API key and a sender city were
+  configured — stores that wanted "paid to the carrier on pickup" had no way to turn
+  that off, and the cost field (previously labelled *Fallback cost*) looked like it
+  was being ignored. General now has a **Live rate calculation via API** switch,
+  defaulting to Disabled for both fresh installs and upgrades; the cost field is
+  what checkout shows, and the API tariff is used only when the switch is on
+  (still falling back to that field if Nova Poshta does not answer).
+
 ### 1.2.7 (OpenCart 3.x)
 - **The whole settings page works again.** OpenCart 3.0.x `Url::link()` HTML-escapes
   ampersands, so every admin AJAX endpoint was rendered as `…&amp;user_token=…`.
