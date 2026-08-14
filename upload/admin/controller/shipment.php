@@ -84,6 +84,12 @@ class Shipment extends \Opencart\System\Engine\Controller {
 				$json['error'] = 'API key or sender warehouse not configured';
 			} else {
 				$client = new \Opencart\System\Library\NovaPoshta\Client($key);
+				$check = $client->checkReturnPossible((string)$row['int_doc_number']);
+				if (empty($check['success'])) {
+					$json['error'] = 'Return not possible: ' . (is_array(isset($check['errors']) ? $check['errors'] : null) ? implode('; ', $check['errors']) : 'unknown');
+					$this->jsonResponse($json);
+					return;
+				}
 				$resp = $client->createReturn((string)$row['int_doc_number'], $senderWh);
 				if (!empty($resp['success']) && !empty($resp['data'][0]['Number'])) {
 					$ttn = (string)$resp['data'][0]['Number'];

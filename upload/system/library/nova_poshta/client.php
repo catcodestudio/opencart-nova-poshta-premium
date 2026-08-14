@@ -158,13 +158,27 @@ class Client {
 	 * Create a return TTN against an existing shipment. Uses the standard
 	 * "refusal of delivery" reason — sender becomes the recipient of the return.
 	 */
-	public function createReturn(string $intDocNumber, string $newWarehouseRef, string $reasonRef = '49754eb2-a9e1-11e3-9fa0-0050568002cf'): array {
+	public function createReturn(string $intDocNumber, string $newWarehouseRef, string $reasonRef = '49754eb2-a9e1-11e3-9fa0-0050568002cf', string $subtypeReasonRef = '49754ec8-a9e1-11e3-9fa0-0050568002cf'): array {
 		return $this->call('AdditionalServiceGeneral', 'save', [
-			'IntDocNumber'    => $intDocNumber,
-			'PaymentMethod'   => 'Cash',
-			'Reason'          => $reasonRef,
-			'OrderType'       => 'orderCargoReturn',
-			'ReturnAddressRef'=> $newWarehouseRef,
+			'IntDocNumber'       => $intDocNumber,
+			'PaymentMethod'      => 'Cash',
+			'Reason'             => $reasonRef,
+			// 🔴 SubtypeReason is mandatory: without it every return dies with
+			// "SubtypeReason is not specified" before the parcel is even looked at.
+			'SubtypeReason'      => $subtypeReasonRef,
+			'OrderType'          => 'orderCargoReturn',
+			'ServiceType'        => 'WarehouseWarehouse',
+			// 🔴 NOT ReturnAddressRef: that field wants an address Ref owned by the
+			// counterparty, so a warehouse Ref comes back as "ReturnAddressRef not
+			// found". A return to a branch goes in RecipientWarehouse.
+			'RecipientWarehouse' => $newWarehouseRef,
+		]);
+	}
+
+	/** Ask Nova Poshta whether this waybill may be returned at all. */
+	public function checkReturnPossible(string $intDocNumber): array {
+		return $this->call('AdditionalServiceGeneral', 'CheckPossibilityCreateReturn', [
+			'Number' => $intDocNumber,
 		]);
 	}
 
