@@ -348,15 +348,48 @@ class License {
 		return $scheme . '://' . $host;
 	}
 
-	/** Persist key + status + raw response to OC settings. */
+	/**
+	 * True when the call never reached a verdict: DNS down, connection refused,
+	 * a 5xx, or a body that isn't our JSON. Anything here says nothing about the
+	 * key itself, so it must not be stored as a verdict.
+	 */
+	private static function isTransportFailure(array $result): bool {
+		if (!empty($result['ok'])) {
+			return false;
+		}
+		$error = (string)($result['error'] ?? '');
+		if (in_array($error, ['network', 'no_curl', 'bad_response'], true)) {
+			return true;
+		}
+		$http = (int)($result['http'] ?? 0);
+		return $http === 0 || $http >= 500;
+	}
+
+	/**
+	 * Persist key + status + raw response to OC settings.
+	 *
+	 * A transport failure is NOT a verdict. Writing `invalid` on an unreachable
+	 * server made GRACE_DAYS dead code: the first failed daily poll during a
+	 * CatCode outage closed Pro on every paying shop, because isPro() checks
+	 * status before it ever looks at the grace window. So an outage leaves the
+	 * previous status, expiry and checked_at untouched — the grace window keeps
+	 * running from the last real answer and closes on its own after GRACE_DAYS.
+	 */
 	private static function store($modelSetting, $config, string $key, array $result, array $extra = []): void {
 		$current = $modelSetting->getSetting('shipping_nova_poshta');
 		if (!is_array($current)) { $current = []; }
+
+		$outage = self::isTransportFailure($result)
+			&& trim((string)($current['shipping_nova_poshta_license_key'] ?? '')) !== '';
+
 		$current['shipping_nova_poshta_license_key']        = $key;
-		$current['shipping_nova_poshta_license_status']     = !empty($result['ok']) ? 'valid' : 'invalid';
-		$current['shipping_nova_poshta_license_checked_at'] = (string)($result['verified_at'] ?? date('Y-m-d H:i:s'));
-		$current['shipping_nova_poshta_license_expires_at'] = (string)($result['expires_at'] ?? '');
 		$current['shipping_nova_poshta_license_data']       = json_encode($result, JSON_UNESCAPED_UNICODE);
+
+		if (!$outage) {
+			$current['shipping_nova_poshta_license_status']     = !empty($result['ok']) ? 'valid' : 'invalid';
+			$current['shipping_nova_poshta_license_checked_at'] = (string)($result['verified_at'] ?? date('Y-m-d H:i:s'));
+			$current['shipping_nova_poshta_license_expires_at'] = (string)($result['expires_at'] ?? '');
+		}
 
 		foreach ($extra as $k => $v) {
 			$current[$k] = $v;
