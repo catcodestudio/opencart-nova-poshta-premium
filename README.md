@@ -81,6 +81,15 @@ build.ps1                # Compress-Archive helper
 
 ## Changelog
 
+### 1.2.16
+
+- Зворотна ТТН більше не падає на валідації Нової Пошти: у запиті бракувало підтипу
+  причини повернення (`SubtypeReason`), а відділення підставлялось у `ReturnAddressRef`,
+  яке чекає адресу контрагента, а не відділення. Тепер шлється `SubtypeReason` +
+  `RecipientWarehouse`, а перед створенням модуль питає `CheckPossibilityCreateReturn`
+  і показує відповідь перевізника замість сирої помилки.
+
+
 ### 1.2.4
 - Fixed: city search failed with an SQL syntax error on stores running the **PDO** database driver (`DB_DRIVER = pdo`). On that driver OpenCart's `escape()` returns a bound placeholder rather than an escaped string, so appending a `%` wildcard inside the quotes produced `LIKE :0%`. Wildcards now go through `escape()` as part of the value, which is correct on both `mysqli` and `pdo`. Warehouse lookup was unaffected, which is why the failure looked like an API key problem.
 
