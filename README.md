@@ -81,6 +81,15 @@ build.ps1                # Compress-Archive helper
 
 ## Changelog
 
+### 1.2.17
+
+- Зворотна ТТН більше не падає на валідації Нової Пошти: у запиті бракувало підтипу
+  причини повернення (`SubtypeReason`), а відділення підставлялось у `ReturnAddressRef`,
+  яке чекає адресу контрагента, а не відділення. Тепер шлється `SubtypeReason` +
+  `RecipientWarehouse`, а перед створенням модуль питає `CheckPossibilityCreateReturn`
+  і показує відповідь перевізника замість сирої помилки.
+
+
 ### 1.2.16
 - **Live rate calculation is now opt-in and off by default.** Until now the module
   always replaced the merchant's cost with the carrier tariff from
