@@ -4,7 +4,8 @@
 
   // Storefront checkout only — never the cart or other pages.
   const route = new URLSearchParams(location.search).get('route') || '';
-  if (route !== 'checkout/checkout') return;
+  // CatCode One Page Checkout serves the checkout on its own route.
+  if (route !== 'checkout/checkout' && route !== 'extension/cc_onepage/checkout') return;
 
   const accent = /^#[0-9a-fA-F]{6}$/.test(cfg.accentColor || '') ? cfg.accentColor : '#da291c';
   // Corner radius is merchant-configurable so the widget matches the host
