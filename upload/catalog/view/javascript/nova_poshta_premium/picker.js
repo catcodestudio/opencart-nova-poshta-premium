@@ -514,6 +514,11 @@
   const wireMethodPersistence = () => {
     if (window.__ccMethodPersistWired) return;
     if (!window.jQuery) return; // no theme AJAX to hook — keep stock behaviour
+    // CatCode One Page Checkout re-quotes and re-saves both methods itself after
+    // every register.save (its own serial queue). A second, parallel restore from
+    // here interleaved with it: shipping_method.save dropped the payment method
+    // and getMethods answered «Потрібний спосіб доставки!», emptying the list.
+    if (document.getElementById('cc-op')) return;
     window.__ccMethodPersistWired = true;
     const $ = window.jQuery;
     const langParam = new URLSearchParams(location.search).get('language');

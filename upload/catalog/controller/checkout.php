@@ -127,7 +127,11 @@ class Checkout extends \Opencart\System\Engine\Controller {
 		if ($key === '') {
 			return null;
 		}
-		$rows = $this->db->query("SELECT zone_id, name, code FROM `" . DB_PREFIX . "zone` WHERE country_id = " . (int)$country_id . " AND status = 1")->rows;
+		// Through the core model: OpenCart 4.1 moved zone names into
+		// `zone_description` (per language), 4.0 keeps them on `zone` — a raw
+		// `SELECT name FROM zone` dies on 4.1 with «Unknown column 'name'».
+		$this->load->model('localisation/zone');
+		$rows = (array)$this->model_localisation_zone->getZonesByCountryId($country_id);
 		foreach ($rows as $row) {
 			$name = self::latinize((string)$row['name']);
 			if ($name !== '' && strpos($name, $key) === 0) {
