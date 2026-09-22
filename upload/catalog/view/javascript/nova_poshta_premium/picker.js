@@ -366,7 +366,53 @@
     closeMenu(whMenu());
     renderSummary();
     fillNativeAddress();
-    api(cfg.setSelection, { city_ref: cityRef, city_name: cityName, city_area: cityArea, warehouse_ref: ref, warehouse_name: name });
+    api(cfg.setSelection, { city_ref: cityRef, city_name: cityName, city_area: cityArea, warehouse_ref: ref, warehouse_name: name })
+      .then(requoteAfterPick, requoteAfterPick);
+  };
+
+  /**
+   * Re-price the order for the city that was just chosen.
+   *
+   * The widget only opens AFTER the carrier is selected, so the quote OpenCart
+   * saved at that moment was calculated without a recipient city — i.e. the flat
+   * fallback from the settings, never the live Nova Poshta rate. The controller
+   * drops the cached quote list in setSelection; asking for it again and
+   * re-saving the same carrier is what moves the ORDER total, because the
+   * confirm step reads `session['shipping_method']`, not the rendered list.
+   */
+  const requoteAfterPick = () => {
+    if (!window.jQuery) return;
+    // One Page Checkout re-runs the whole chain itself (the native fields this
+    // picker fills raise `change` inside its forms) and re-saves both methods in
+    // its own serial queue; a second, parallel save from here races it.
+    if (document.getElementById('cc-op')) return;
+    const shipCode = selectedShippingCode();
+    if (shipCode.indexOf('nova_poshta.') !== 0) return;
+    const $ = window.jQuery;
+    const langParam = new URLSearchParams(location.search).get('language');
+    const L = langParam ? '&language=' + encodeURIComponent(langParam) : '';
+    const U = (r) => 'index.php?route=' + r + L;
+    const payCode = ($('#input-payment-code').val() || '').trim();
+    const reloadConfirm = () => $('#checkout-confirm').load(U('checkout/confirm.confirm'), () => { if (window.__ccGateRefresh) window.__ccGateRefresh(); });
+    const restorePayment = () => {
+      // `shipping_method.save` clears the chosen payment method server-side.
+      if (!payCode) return reloadConfirm();
+      $.ajax({ url: U('checkout/payment_method.getMethods'), dataType: 'json' }).done((pm) => {
+        let plabel = '';
+        const groups = (pm && pm.payment_methods) || {};
+        for (const i in groups) { const opt = groups[i].option || {}; for (const k in opt) if (opt[k].code === payCode) plabel = opt[k].name; }
+        $.ajax({ url: U('checkout/payment_method.save'), type: 'post', data: { payment_method: payCode }, dataType: 'json' })
+          .always(() => { if (plabel) $('#input-payment-method').val(plabel); reloadConfirm(); });
+      }).fail(reloadConfirm);
+    };
+    $.ajax({ url: U('checkout/shipping_method.quote'), dataType: 'json' }).done((q) => {
+      let label = '';
+      const methods = (q && q.shipping_methods) || {};
+      for (const i in methods) { const quotes = methods[i].quote || {}; for (const j in quotes) if (quotes[j].code === shipCode) label = quotes[j].name + ' - ' + quotes[j].text; }
+      if (!label) return; // carrier no longer quotable for this address — leave the session alone
+      $.ajax({ url: U('checkout/shipping_method.save'), type: 'post', data: { shipping_method: shipCode }, dataType: 'json' })
+        .always(() => { $('#input-shipping-method').val(label); restorePayment(); });
+    });
   };
 
   // keyboard navigation within a menu

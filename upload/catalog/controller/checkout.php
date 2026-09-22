@@ -49,6 +49,11 @@ class Checkout extends \Opencart\System\Engine\Controller {
 		$this->session->data['np_recipient_warehouse_ref']  = $wh_ref;
 		$this->session->data['np_recipient_warehouse_name'] = $wh_name;
 		$this->applyToShippingAddress();
+		// The rate is keyed by the recipient city, so the quote list the core
+		// cached when the carrier was picked (no city yet — hence the flat
+		// fallback) must not survive the pick: `shipping_method.save` validates
+		// against this cache, so a stale entry would re-save the old price.
+		unset($this->session->data['shipping_methods']);
 		$this->jsonResponse(['ok' => true]);
 	}
 
