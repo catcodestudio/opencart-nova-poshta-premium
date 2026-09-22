@@ -611,7 +611,12 @@
     setTimeout(() => {
       const zone = q1(NATIVE.zone);
       if (zone && !zone.value) {
-        const opt = [...zone.options].find((o) => o.value);
+        // Placeholder oblast — Kyiv, never the first option: the stock Ukraine
+        // zone list starts with "Avtonomna Respublika Krym"/"Cherkas'ka
+        // Oblast'", and that seed survives into the order whenever the oblast
+        // of the chosen city finds no match in the store's zone list.
+        const opt = [...zone.options].find((o) => o.value && (String(o.text).toLowerCase().replace(/[^a-z]/g, '') === 'kyiv' || /^\s*(м\.\s*)?київ\s*$/i.test(String(o.text))))
+          || [...zone.options].find((o) => o.value);
         if (opt) { zone.value = opt.value; zone.dispatchEvent(new Event('change', { bubbles: true })); }
       }
       // Placeholders must PASS core register.save validation (city 2–128,
