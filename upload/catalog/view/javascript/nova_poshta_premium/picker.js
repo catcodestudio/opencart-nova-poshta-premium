@@ -202,6 +202,88 @@
     el.dispatchEvent(new Event('change', { bubbles: true }));
   };
 
+  // --- shared: who owns the native shipping-address form ---------------------
+  // The same block ships in the Nova Poshta, Ukrposhta and ROZETKA pickers; the
+  // first one loaded installs it. A carrier widget may hide and fill the core
+  // address fields ONLY while its own method is selected. Before it writes, the
+  // customer's values are snapshotted (sessionStorage survives a reload); when
+  // any other method (courier, flat, pickup…) is chosen the snapshot comes
+  // back, the fields are shown again and the confirm button waits until the
+  // real address is saved — so an order never ships to «Україна / Відділення
+  // перевізника».
+  if (!window.__ccNativeAddr) {
+    window.__ccNativeAddr = (() => {
+      const PREFIXES = ['nova_poshta.', 'ukrposhta.', 'rozetka_delivery.', 'rzd_justin.'];
+      const FIELDS = ['#input-shipping-company', '#input-shipping-address-1', '#input-shipping-address-2', '#input-shipping-city', '#input-shipping-postcode', '#input-shipping-country', '#input-shipping-zone'];
+      const PLACEHOLDER = /^(Відділення перевізника|Пункт видачі перевізника|Пункт видачі ROZETKA|Україна|Нова Пошта|Укрпошта|Justin|Уточнюється|0+)$/i;
+      const KEY = 'ccNativeAddr';
+      const load = () => { try { return JSON.parse(window.sessionStorage.getItem(KEY) || 'null'); } catch (e) { return null; } };
+      const keep = (v) => { try { if (v) window.sessionStorage.setItem(KEY, JSON.stringify(v)); else window.sessionStorage.removeItem(KEY); } catch (e) { /* storage off */ } };
+      const fire = (el) => { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
+      const visible = (el) => !!el && el.offsetParent !== null;
+      let snap = load();
+      const A = {
+        stale: false,
+        isCarrier: (code) => PREFIXES.some((p) => String(code || '').indexOf(p) === 0),
+        claim() {
+          if (snap) return;
+          snap = {};
+          FIELDS.forEach((s) => {
+            const el = document.querySelector(s);
+            if (el) snap[s] = PLACEHOLDER.test(String(el.value || '').trim()) ? '' : String(el.value || '');
+          });
+          keep(snap);
+        },
+        release() {
+          if (!snap) return;
+          const s0 = snap;
+          snap = null;
+          keep(null);
+          let changed = false;
+          const put = (sel) => {
+            const el = document.querySelector(sel);
+            if (!el || !(sel in s0)) return;
+            const v = s0[sel] || '';
+            if (el.tagName === 'SELECT' && v && ![...el.options].some((o) => o.value === v)) return;
+            if (el.value === v) return;
+            el.value = v; changed = true; fire(el);
+          };
+          FIELDS.filter((s) => s !== '#input-shipping-zone').forEach(put);
+          // Zones are reloaded over AJAX after a country change — restore last.
+          put('#input-shipping-zone');
+          setTimeout(() => put('#input-shipping-zone'), 1200);
+          document.querySelectorAll('#shipping-address [name^="shipping_custom_field"]').forEach((el) => {
+            if (el.dataset.ccAutofill !== '1') return;
+            delete el.dataset.ccAutofill;
+            if (el.type !== 'radio' && el.type !== 'checkbox' && el.tagName !== 'SELECT') { el.value = ''; changed = true; fire(el); }
+          });
+          if (changed) A.stale = true;
+        },
+        // Confirm predicate: a non-carrier method needs a real, saved address.
+        ok(code) {
+          if (!code || A.isCarrier(code)) return true;
+          if (A.stale) return false;
+          return ['#input-shipping-address-1', '#input-shipping-city'].every((s) => {
+            const el = document.querySelector(s);
+            return !visible(el) || !!String(el.value || '').trim();
+          });
+        },
+      };
+      if (window.jQuery) {
+        window.jQuery(document).ajaxSuccess((e, xhr, settings) => {
+          const u = (settings && settings.url) || '';
+          if (!/register\.save|shipping_address\.save|shipping_address\.address/.test(u)) return;
+          let ok = false;
+          try { const j = JSON.parse(xhr.responseText) || {}; ok = !!j.success && !j.error; } catch (err) { /* not json */ }
+          if (ok) A.stale = false;
+          if (window.__ccGateRefresh) window.__ccGateRefresh();
+        });
+      }
+      return A;
+    })();
+  }
+  const ccAddr = window.__ccNativeAddr;
+
   const hideNativeAddress = () => {
     const host = document.querySelector('#shipping-address');
     if (!host) return;
@@ -217,6 +299,9 @@
       child.classList.add('np-native-hidden');
     });
   };
+  const showNativeAddress = () => {
+    document.querySelectorAll('.np-native-hidden').forEach((n) => n.classList.remove('np-native-hidden'));
+  };
 
   // Cyrillic → Latin (national standard) so a Ukrainian oblast name can be
   // compared against a transliterated OpenCart zone list.
@@ -230,8 +315,11 @@
     const opts = [...zoneSel.options].filter((o) => o.value);
     // Prefix match both ways: "kharkivska" ⊂ "kharkivskaoblast", or a bare
     // "kyiv" zone ⊂ area "kyivska" — the longer/oblast form wins over the city.
-    return opts.find((o) => normLat(o.text).indexOf(key) === 0)
-        || opts.find((o) => key.indexOf(normLat(o.text)) === 0)
+    // Cyrillic zone names (uk-ua store language) are transliterated too; an
+    // empty normalised name must never match (it picked the first zone).
+    const nz = (o) => normLat(translit(o.text));
+    return opts.find((o) => { const n = nz(o); return !!n && n.indexOf(key) === 0; })
+        || opts.find((o) => { const n = nz(o); return !!n && key.indexOf(n) === 0; })
         || null;
   };
 
@@ -271,6 +359,7 @@
     // restore()/fill would otherwise stomp a Nova Poshta choice with its own
     // "Укрпошта"/first-zone (AR Krym) defaults. No-op unless NP is chosen.
     if (selectedShippingCode().indexOf('nova_poshta.') !== 0) return;
+    ccAddr.claim();
     const country = q1(NATIVE.country);
     if (country && country.value !== '220') {
       const opt = [...country.options].find((o) => /Україна|Ukraine/i.test(o.text));
@@ -522,10 +611,23 @@
     (document.querySelector('#input-shipping-code')?.value
       || document.querySelector('input[name="shipping_method"]:checked')?.value
       || '');
+  let npOwned = false;
   const gate = () => {
-    const isNp = selectedShippingCode().indexOf('nova_poshta.') === 0;
+    const code = selectedShippingCode();
+    const isNp = code.indexOf('nova_poshta.') === 0;
     const _wasHidden = wrap.classList.contains('np-gated');
     wrap.classList.toggle('np-gated', !isNp);
+    // The native address form is ours to hide and fill only while Nova Poshta
+    // is the chosen method; any other method gets it back, visible and with
+    // the customer's own values.
+    if (isNp) {
+      hideNativeAddress();
+      if (!npOwned) { npOwned = true; seedNative(); fillNativeAddress(); }
+    } else {
+      npOwned = false;
+      showNativeAddress();
+      if (code && !ccAddr.isCarrier(code)) ccAddr.release();
+    }
     // Widget appeared for our carrier — on mobile it renders above the
     // method selector, so scroll it into view instead of leaving the
     // customer to hunt for it (only after a real pick, not initial render).
@@ -552,6 +654,11 @@
     // the seeded placeholder (city «Україна», first zone) instead of a branch.
     window.__ccGatePredicates.push(() =>
       selectedShippingCode().indexOf('nova_poshta.') !== 0 || !!whHidden().value);
+    if (!window.__ccAddrPredicate) {
+      window.__ccAddrPredicate = true;
+      window.__ccGatePredicates.push(() => window.__ccNativeAddr.ok(
+        document.querySelector('#input-shipping-code')?.value || document.querySelector('input[name="shipping_method"]:checked')?.value || ''));
+    }
     if (window.__ccConfirmGateWired) return; // shared machinery already wired by the other carrier
     if (!window.jQuery) return; // can't detect the theme's save — keep stock behaviour
     window.__ccConfirmGateWired = true;
@@ -636,12 +743,17 @@
   };
 
   const seedNative = () => {
+    // Placeholders only while Nova Poshta is the chosen method — any other
+    // method keeps the customer's own, visible address.
+    if (selectedShippingCode().indexOf('nova_poshta.') !== 0) return;
+    ccAddr.claim();
     const country = q1(NATIVE.country);
     if (country && country.value !== '220') {
       const opt = [...country.options].find((o) => /Україна|Ukraine/i.test(o.text));
       if (opt) { country.value = opt.value; country.dispatchEvent(new Event('change', { bubbles: true })); }
     }
     setTimeout(() => {
+      if (selectedShippingCode().indexOf('nova_poshta.') !== 0) return;
       const zone = q1(NATIVE.zone);
       if (zone && !zone.value) {
         // Placeholder oblast — Kyiv, never the first option: the stock Ukraine
@@ -672,9 +784,7 @@
     // The session is seeded by now — drop the stale error so it doesn't scare
     // the customer off clicking the method button (which now works).
     document.querySelector('#error-shipping-method')?.classList.remove('d-block');
-    hideNativeAddress();
     bind();
-    seedNative();
     wireGate();
     wireConfirmGate();
     wireMethodPersistence();
