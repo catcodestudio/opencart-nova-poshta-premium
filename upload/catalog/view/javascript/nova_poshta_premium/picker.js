@@ -607,8 +607,14 @@
 
   // --- method-first gating: show the widget only after the Nova Poshta
   // shipping method is chosen in the theme (input[name="shipping_method"]).
+  // CatCode One Page Checkout draws its own radios (cc_shipping_method) and
+  // copies the code into #input-shipping-code only after the server accepted
+  // the save. The customer's radio wins: when that save is still queued — or
+  // was refused because a parallel request lost the quote from the session —
+  // NP stayed ticked while the widget waited for a code that never came.
   const selectedShippingCode = () =>
-    (document.querySelector('#input-shipping-code')?.value
+    (document.querySelector('input[name="cc_shipping_method"]:checked')?.value
+      || document.querySelector('#input-shipping-code')?.value
       || document.querySelector('input[name="shipping_method"]:checked')?.value
       || '');
   let npOwned = false;
@@ -635,10 +641,14 @@
   };
   const wireGate = () => {
     document.addEventListener('change', (e) => {
-      if (e.target && e.target.name === 'shipping_method') { window.__ccMethodPicked = true; gate(); }
+      if (e.target && (e.target.name === 'shipping_method' || e.target.name === 'cc_shipping_method')) { window.__ccMethodPicked = true; gate(); }
     });
     const codeEl = document.querySelector('#input-shipping-code') || document.querySelector('#input-shipping-method');
     if (codeEl) new MutationObserver(gate).observe(codeEl, { attributes: true, attributeFilter: ['value'] });
+    // One Page redraws its radio list after every quote (possibly ticking
+    // another method) — re-gate on each redraw, not only in the first 30 s.
+    const ccList = document.getElementById('cc-op-shipping-list');
+    if (ccList) new MutationObserver(gate).observe(ccList, { childList: true, subtree: true });
     let n = 0; const iv = setInterval(() => { gate(); if (++n > 60) clearInterval(iv); }, 500);
   };
   // --- contacts-first confirm gate ------------------------------------------
@@ -657,7 +667,7 @@
     if (!window.__ccAddrPredicate) {
       window.__ccAddrPredicate = true;
       window.__ccGatePredicates.push(() => window.__ccNativeAddr.ok(
-        document.querySelector('#input-shipping-code')?.value || document.querySelector('input[name="shipping_method"]:checked')?.value || ''));
+        document.querySelector('input[name="cc_shipping_method"]:checked')?.value || document.querySelector('#input-shipping-code')?.value || document.querySelector('input[name="shipping_method"]:checked')?.value || ''));
     }
     if (window.__ccConfirmGateWired) return; // shared machinery already wired by the other carrier
     if (!window.jQuery) return; // can't detect the theme's save — keep stock behaviour
@@ -792,9 +802,20 @@
     restore();
   };
 
+  // On CatCode One Page Checkout start after its jQuery-ready handler: that is
+  // where it puts every same-origin request into one serial queue. Started on
+  // DOMContentLoaded (jQuery 3 runs ready handlers later, asynchronously) our
+  // getSelection went out in parallel with its first shipping quote, and
+  // OpenCart writes the whole session back when a request ends — the quote
+  // list could be lost, so the next shipping_method.save answered «Потрібний
+  // спосіб доставки!» and the method never reached the session.
+  const start = () => {
+    if (document.getElementById('cc-op') && window.jQuery) window.jQuery(init);
+    else init();
+  };
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', start);
   } else {
-    init();
+    start();
   }
 })();
