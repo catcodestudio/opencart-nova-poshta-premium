@@ -4,6 +4,8 @@ namespace Opencart\Catalog\Controller\Extension\NovaPoshtaPremium;
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/client.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/crypto.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/cache.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/zones.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/selection.php';
 
 class Checkout extends \Opencart\System\Engine\Controller {
 	private function jsonResponse(array $data): void {
@@ -43,18 +45,62 @@ class Checkout extends \Opencart\System\Engine\Controller {
 		$city_area  = trim((string)($this->request->post['city_area'] ?? ''));
 		$wh_ref     = trim((string)($this->request->post['warehouse_ref'] ?? ''));
 		$wh_name    = trim((string)($this->request->post['warehouse_name'] ?? ''));
+		// The oblast comes from the module's own city directory by ref; the
+		// posted value is only a fallback for a manually typed city.
+		$dirArea = \Opencart\System\Library\NovaPoshta\Cache::cityArea($this->db, $city_ref);
+		if ($dirArea !== '') {
+			$city_area = $dirArea;
+		}
 		$this->session->data['np_recipient_city_ref']       = $city_ref;
 		$this->session->data['np_recipient_city_name']      = $city_name;
 		$this->session->data['np_recipient_city_area']      = $city_area;
 		$this->session->data['np_recipient_warehouse_ref']  = $wh_ref;
 		$this->session->data['np_recipient_warehouse_name'] = $wh_name;
+		\Opencart\System\Library\NovaPoshta\Selection::remember($this->session);
 		$this->applyToShippingAddress();
 		// The rate is keyed by the recipient city, so the quote list the core
 		// cached when the carrier was picked (no city yet — hence the flat
 		// fallback) must not survive the pick: `shipping_method.save` validates
 		// against this cache, so a stale entry would re-save the old price.
 		unset($this->session->data['shipping_methods']);
-		$this->jsonResponse(['ok' => true]);
+		$this->requoteChosenMethod();
+		$zone = $this->resolveZone($city_area, $city_name);
+		$this->jsonResponse([
+			'ok'      => true,
+			'zone_id' => $zone ? (int)$zone['zone_id'] : 0,
+			'cost'    => (float)($this->session->data['shipping_method']['cost'] ?? 0),
+		]);
+	}
+
+	/**
+	 * Re-prices the ALREADY CHOSEN Nova Poshta method on the server.
+	 *
+	 * The carrier is usually picked before the branch (the widget opens only
+	 * then), so session['shipping_method'] holds a quote made without the
+	 * recipient city. The widget re-saves the method on the stock checkout, but
+	 * a theme or one-page checkout that doesn't re-save would still carry the
+	 * stale price into the order — the confirm step reads the session entry, not
+	 * the rendered list. Replacing it here makes the price independent of the
+	 * front end. The payment method is left untouched.
+	 */
+	private function requoteChosenMethod(): void {
+		$chosen = $this->session->data['shipping_method'] ?? null;
+		if (!is_array($chosen) || strpos((string)($chosen['code'] ?? ''), 'nova_poshta.') !== 0) {
+			return;
+		}
+		$address = $this->session->data['shipping_address'] ?? null;
+		if (!is_array($address) || !isset($address['country_id'])) {
+			return;
+		}
+		try {
+			$this->load->model('extension/nova_poshta_premium/shipping/nova_poshta');
+			$quote = $this->model_extension_nova_poshta_premium_shipping_nova_poshta->getQuote($address);
+		} catch (\Throwable $e) {
+			return;
+		}
+		if (!empty($quote['quote']['nova_poshta']) && is_array($quote['quote']['nova_poshta'])) {
+			$this->session->data['shipping_method'] = $quote['quote']['nova_poshta'];
+		}
 	}
 
 	/**
@@ -64,6 +110,8 @@ class Checkout extends \Opencart\System\Engine\Controller {
 	 * which the theme may have saved (register.save) BEFORE the customer picked
 	 * a warehouse, freezing whatever placeholder was seeded at page load. Writing
 	 * the session here makes the final address independent of the click order.
+	 * The order row itself is corrected once more after addOrder/editOrder
+	 * (events.php), because a later register.save may overwrite this session.
 	 */
 	private function applyToShippingAddress(): void {
 		// Never stomp another carrier's address: only apply while NP is the
@@ -81,7 +129,7 @@ class Checkout extends \Opencart\System\Engine\Controller {
 			return;
 		}
 		$area = (string)($this->session->data['np_recipient_city_area'] ?? '');
-		$zone = $this->matchZone((int)$country['country_id'], $area);
+		$zone = $this->resolveZone($area, $city);
 		$wh   = (string)($this->session->data['np_recipient_warehouse_name'] ?? '');
 		$prev = (array)($this->session->data['shipping_address'] ?? []);
 		$this->session->data['shipping_address'] = [
@@ -93,12 +141,11 @@ class Checkout extends \Opencart\System\Engine\Controller {
 			'address_2'      => '',
 			'city'           => $city,
 			'postcode'       => '',
-			'zone_id'        => $zone ? (int)$zone['zone_id'] : (int)($prev['zone_id'] ?? 0),
-			// Display the oblast exactly as the NP classifier names it (Cyrillic),
-			// not the store's often-transliterated zone dictionary entry; zone_id
-			// still carries the matched store zone for geo/tax logic.
-			'zone'           => $area !== '' ? $area : ($zone ? (string)$zone['name'] : (string)($prev['zone'] ?? '')),
-			'zone_code'      => $zone ? (string)$zone['code'] : (string)($prev['zone_code'] ?? ''),
+			// No match → no zone: the previous value is the hidden form's seed
+			// (first zone of the country), not the customer's region.
+			'zone_id'        => $zone ? (int)$zone['zone_id'] : 0,
+			'zone'           => $zone ? (string)$zone['name'] : $area,
+			'zone_code'      => $zone ? (string)$zone['code'] : '',
 			'country_id'     => (int)$country['country_id'],
 			'country'        => (string)($country['name'] ?? 'Ukraine'),
 			'iso_code_2'     => (string)($country['iso_code_2'] ?? 'UA'),
@@ -106,6 +153,17 @@ class Checkout extends \Opencart\System\Engine\Controller {
 			'address_format' => (string)($country['address_format'] ?? ''),
 			'custom_field'   => (array)($prev['custom_field'] ?? []),
 		];
+	}
+
+	private function resolveZone(string $area, string $city): array {
+		$country = $this->ukraineCountry();
+		return \Opencart\System\Library\NovaPoshta\Zones::resolve(
+			$this->db,
+			$area,
+			$city,
+			(int)$this->config->get('config_language_id'),
+			(int)($country['country_id'] ?? 0)
+		);
 	}
 
 	/** Store country if it is Ukraine, else the Ukraine row — carriers ship domestically only. */
@@ -121,60 +179,15 @@ class Checkout extends \Opencart\System\Engine\Controller {
 		return is_array($info) ? $info : [];
 	}
 
-	/**
-	 * Matches an NP oblast name (Cyrillic, e.g. "Дніпропетровська") against the
-	 * store's zone list, which is frequently transliterated ("Dnipropetrovs'ka
-	 * Oblast'"). Normalized prefix match both ways; null when nothing matches —
-	 * never a blind first-row fallback.
-	 */
-	private function matchZone(int $country_id, string $area): ?array {
-		$key = self::latinize(preg_replace('/\s*(область|обл\.?|oblast\'?|м\.)\s*/iu', ' ', $area));
-		if ($key === '') {
-			return null;
-		}
-		// Through the core model: OpenCart 4.1 moved zone names into
-		// `zone_description` (per language), 4.0 keeps them on `zone` — a raw
-		// `SELECT name FROM zone` dies on 4.1 with «Unknown column 'name'».
-		$this->load->model('localisation/zone');
-		$rows = (array)$this->model_localisation_zone->getZonesByCountryId($country_id);
-		foreach ($rows as $row) {
-			$name = self::latinize((string)$row['name']);
-			if ($name !== '' && strpos($name, $key) === 0) {
-				return $row;
-			}
-		}
-		foreach ($rows as $row) {
-			$name = self::latinize((string)$row['name']);
-			if ($name !== '' && strpos($key, $name) === 0) {
-				return $row;
-			}
-		}
-		return null;
-	}
-
-	/** Cyrillic → national-standard Latin, lowercased, a-z only (mbstring-free). */
-	private static function latinize(string $s): string {
-		static $map = [
-			'а' => 'a', 'б' => 'b', 'в' => 'v', 'г' => 'h', 'ґ' => 'g', 'д' => 'd', 'е' => 'e', 'є' => 'ie',
-			'ж' => 'zh', 'з' => 'z', 'и' => 'y', 'і' => 'i', 'ї' => 'i', 'й' => 'i', 'к' => 'k', 'л' => 'l',
-			'м' => 'm', 'н' => 'n', 'о' => 'o', 'п' => 'p', 'р' => 'r', 'с' => 's', 'т' => 't', 'у' => 'u',
-			'ф' => 'f', 'х' => 'kh', 'ц' => 'ts', 'ч' => 'ch', 'ш' => 'sh', 'щ' => 'shch', 'ь' => '', 'ю' => 'iu', 'я' => 'ia',
-			'А' => 'a', 'Б' => 'b', 'В' => 'v', 'Г' => 'h', 'Ґ' => 'g', 'Д' => 'd', 'Е' => 'e', 'Є' => 'ie',
-			'Ж' => 'zh', 'З' => 'z', 'И' => 'y', 'І' => 'i', 'Ї' => 'i', 'Й' => 'i', 'К' => 'k', 'Л' => 'l',
-			'М' => 'm', 'Н' => 'n', 'О' => 'o', 'П' => 'p', 'Р' => 'r', 'С' => 's', 'Т' => 't', 'У' => 'u',
-			'Ф' => 'f', 'Х' => 'kh', 'Ц' => 'ts', 'Ч' => 'ch', 'Ш' => 'sh', 'Щ' => 'shch', 'Ь' => '', 'Ю' => 'iu', 'Я' => 'ia',
-			"'" => '', '’' => '',
-		];
-		return preg_replace('/[^a-z]/', '', strtolower(strtr($s, $map)));
-	}
-
 	public function getSelection(): void {
+		\Opencart\System\Library\NovaPoshta\Selection::restore($this->session);
 		$this->jsonResponse([
 			'city_ref'       => (string)($this->session->data['np_recipient_city_ref'] ?? ''),
 			'city_name'      => (string)($this->session->data['np_recipient_city_name'] ?? ''),
 			'city_area'      => (string)($this->session->data['np_recipient_city_area'] ?? ''),
 			'warehouse_ref'  => (string)($this->session->data['np_recipient_warehouse_ref'] ?? ''),
 			'warehouse_name' => (string)($this->session->data['np_recipient_warehouse_name'] ?? ''),
+			'zone_id'        => (int)($this->resolveZone((string)($this->session->data['np_recipient_city_area'] ?? ''), (string)($this->session->data['np_recipient_city_name'] ?? ''))['zone_id'] ?? 0),
 		]);
 	}
 }

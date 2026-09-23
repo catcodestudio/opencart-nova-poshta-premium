@@ -49,6 +49,18 @@ class Cache {
 		return $out;
 	}
 
+	/**
+	 * Oblast of a city straight from the module's own directory — the order
+	 * region is decided on the server, never from what the browser posted.
+	 */
+	public static function cityArea($db, string $cityRef): string {
+		if ($cityRef === '') {
+			return '';
+		}
+		$row = $db->query("SELECT area_description FROM `" . DB_PREFIX . "np_cities` WHERE ref = '" . $db->escape($cityRef) . "'")->row;
+		return $row ? trim((string)$row['area_description']) : '';
+	}
+
 	public static function getWarehouses($db, string $cityRef, string $apiKey): array {
 		// Check freshness: any cached row for this city within TTL?
 		$fresh = $db->query("SELECT COUNT(*) AS cnt FROM `" . DB_PREFIX . "np_warehouses` WHERE city_ref = '" . $db->escape($cityRef) . "' AND updated_at > DATE_SUB(NOW(), INTERVAL " . self::WAREHOUSE_TTL_DAYS . " DAY)")->row;

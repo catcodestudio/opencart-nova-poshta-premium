@@ -4,6 +4,9 @@ namespace Opencart\Catalog\Controller\Extension\NovaPoshtaPremium;
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/client.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/crypto.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/license.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/cache.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/zones.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/selection.php';
 
 class Events extends \Opencart\System\Engine\Controller {
 	/** UTF-8 safe truncate that survives hosts without mbstring. */
@@ -67,6 +70,7 @@ class Events extends \Opencart\System\Engine\Controller {
 		if (!in_array((string)($this->request->get['route'] ?? ''), ['checkout/checkout', 'extension/cc_onepage/checkout'], true)) {
 			return;
 		}
+		$this->ensureEditEvents();
 		if (isset($this->session->data['shipping_address']['address_id'])) {
 			return;
 		}
@@ -126,18 +130,43 @@ class Events extends \Opencart\System\Engine\Controller {
 	}
 
 	/**
-	 * On order create — capture chosen NP city/warehouse refs from session
-	 * and write a draft np_shipment row keyed by order_id.
+	 * catalog/model/checkout/order.addOrder/after — $output is the new order_id.
 	 */
 	public function orderAdded(string &$route, array &$args, mixed &$output): void {
-		$order_id = (int)($output ?? 0);
+		$this->syncOrder((int)($output ?? 0));
+	}
+
+	/**
+	 * catalog/model/checkout/order.editOrder/after — args[0] is the order_id.
+	 *
+	 * OpenCart 4 creates the order when the confirm block first renders and then
+	 * REWRITES it (editOrder) from the session on every later confirm refresh —
+	 * after a payment change, a register.save of the hidden native form, etc.
+	 * That rewrite put back the hidden form's seed zone (the first zone of the
+	 * country, «Автономна Республіка Крим») for a Kyiv branch, so the address
+	 * must be stamped after each edit too, not only on create.
+	 */
+	public function orderEdited(string &$route, array &$args, mixed &$output): void {
+		$this->syncOrder((int)($args[0] ?? 0));
+	}
+
+	/**
+	 * Writes the chosen Nova Poshta destination onto the order row and keeps a
+	 * draft np_shipment row for it. Idempotent: safe after addOrder and after
+	 * every editOrder.
+	 */
+	private function syncOrder(int $order_id): void {
 		if ($order_id <= 0) {
 			return;
 		}
 		// Only act on orders actually shipped by this carrier — a stale NP
 		// selection in the session must not attach drafts to Ukrposhta orders.
+		\Opencart\System\Library\NovaPoshta\Selection::restore($this->session);
 		$method = (string)($this->session->data['shipping_method']['code'] ?? '');
 		if (strpos($method, 'nova_poshta.') !== 0) {
+			// The customer switched carriers after an earlier NP pick: drop the
+			// untouched draft this order got then (never one with a waybill).
+			$this->db->query("DELETE FROM `" . DB_PREFIX . "np_shipment` WHERE order_id = " . $order_id . " AND status_code = 0 AND (int_doc_number IS NULL OR int_doc_number = '')");
 			return;
 		}
 		$cityRef = (string)($this->session->data['np_recipient_city_ref'] ?? '');
@@ -145,13 +174,21 @@ class Events extends \Opencart\System\Engine\Controller {
 		$whName  = (string)($this->session->data['np_recipient_warehouse_name'] ?? '');
 		$cityName= (string)($this->session->data['np_recipient_city_name'] ?? '');
 		if ($cityRef === '' && $whRef === '') {
-			return; // Customer used a different shipping method.
+			return; // Nothing picked yet — the next editOrder will carry it.
 		}
-		// The order address must carry OUR data verbatim: the NP classifier city
-		// and oblast (Cyrillic) and the picked branch; NP branches have no postal
-		// code, so the index is emptied — never a '00000' placeholder that the
-		// hidden native form may have frozen into the order.
-		$area = (string)($this->session->data['np_recipient_city_area'] ?? '');
+		// The order address must carry OUR data: the NP classifier city, the
+		// oblast resolved on the server from the module's own city directory
+		// (never the hidden form's seed) and the picked branch; NP branches have
+		// no postal code, so the index is emptied — never a '00000' placeholder
+		// that the hidden native form may have frozen into the order.
+		$area = \Opencart\System\Library\NovaPoshta\Cache::cityArea($this->db, $cityRef);
+		if ($area === '') {
+			$area = (string)($this->session->data['np_recipient_city_area'] ?? '');
+		}
+		$row       = $this->db->query("SELECT shipping_country_id FROM `" . DB_PREFIX . "order` WHERE order_id = " . $order_id)->row;
+		$countryId = (int)($row['shipping_country_id'] ?? 0);
+		$zone      = \Opencart\System\Library\NovaPoshta\Zones::resolve($this->db, $area, $cityName, (int)$this->config->get('config_language_id'), $countryId);
+
 		$sets = ["shipping_postcode = ''"];
 		if ($cityName !== '') {
 			$sets[] = "shipping_city = '" . $this->db->escape($cityName) . "'";
@@ -159,12 +196,30 @@ class Events extends \Opencart\System\Engine\Controller {
 		if ($whName !== '') {
 			$sets[] = "shipping_address_1 = '" . $this->db->escape($whName) . "'";
 		}
-		if ($area !== '') {
+		if ($zone) {
+			$sets[] = "shipping_zone_id = " . (int)$zone['zone_id'];
+			$sets[] = "shipping_zone = '" . $this->db->escape((string)$zone['name']) . "'";
+		} else {
+			// No unambiguous store zone: no zone id at all, and the NP oblast as
+			// plain text (or nothing) — never a random first zone of the country.
+			$sets[] = "shipping_zone_id = 0";
 			$sets[] = "shipping_zone = '" . $this->db->escape($area) . "'";
 		}
 		$this->db->query("UPDATE `" . DB_PREFIX . "order` SET " . implode(', ', $sets) . " WHERE order_id = " . $order_id);
+
 		$senderCity = (string)$this->config->get('shipping_nova_poshta_sender_city_ref');
 		$senderWh   = (string)$this->config->get('shipping_nova_poshta_sender_warehouse_ref');
+		$existing   = $this->db->query("SELECT shipment_id, int_doc_number FROM `" . DB_PREFIX . "np_shipment` WHERE order_id = " . $order_id . " ORDER BY shipment_id DESC LIMIT 1")->row;
+		if ($existing) {
+			if ((string)($existing['int_doc_number'] ?? '') === '') {
+				$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET
+					recipient_city_ref = '" . $this->db->escape($cityRef) . "',
+					recipient_warehouse_ref = '" . $this->db->escape($whRef) . "',
+					recipient_name = '" . $this->db->escape($cityName . ' / ' . $whName) . "'
+					WHERE shipment_id = " . (int)$existing['shipment_id']);
+			}
+			return;
+		}
 		$this->db->query("INSERT INTO `" . DB_PREFIX . "np_shipment` SET
 			order_id = " . $order_id . ",
 			sender_city_ref = '" . $this->db->escape($senderCity) . "',
@@ -176,6 +231,32 @@ class Events extends \Opencart\System\Engine\Controller {
 			status_code = 0,
 			status_text = 'Чернетка',
 			created_at = NOW()");
+	}
+
+	/**
+	 * The editOrder hook arrived in 1.2.22. A store that updates the files
+	 * without pressing «Setup» in the module settings would never get it, so
+	 * register it here once (checkout page only; one indexed lookup).
+	 */
+	private function ensureEditEvents(): void {
+		$triggers = [
+			'nova_poshta_premium_order_edited'       => 'catalog/model/checkout/order*editOrder/after',
+			'nova_poshta_premium_order_edited_slash' => 'catalog/model/checkout/order/editOrder/after',
+		];
+		try {
+			$have = [];
+			foreach ($this->db->query("SELECT code FROM `" . DB_PREFIX . "event` WHERE code IN ('" . implode("','", array_keys($triggers)) . "')")->rows as $r) {
+				$have[(string)$r['code']] = true;
+			}
+			foreach ($triggers as $code => $trigger) {
+				if (isset($have[$code])) {
+					continue;
+				}
+				$this->db->query("INSERT INTO `" . DB_PREFIX . "event` SET code = '" . $this->db->escape($code) . "', description = 'Nova Poshta Premium — stamp the NP address and oblast after the order is rewritten', `trigger` = '" . $this->db->escape($trigger) . "', action = 'extension/nova_poshta_premium/events.orderEdited', status = 1, sort_order = 10");
+			}
+		} catch (\Throwable $e) {
+			// Never break the storefront over a self-heal.
+		}
 	}
 
 	/**

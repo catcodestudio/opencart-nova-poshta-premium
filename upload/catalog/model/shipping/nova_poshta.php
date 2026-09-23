@@ -3,6 +3,7 @@ namespace Opencart\Catalog\Model\Extension\NovaPoshtaPremium\Shipping;
 
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/client.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/crypto.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/selection.php';
 
 class NovaPoshta extends \Opencart\System\Engine\Model {
 	public function getQuote(array $address): array {
@@ -21,6 +22,9 @@ class NovaPoshta extends \Opencart\System\Engine\Model {
 			return [];
 		}
 
+		// A parallel checkout request may have written back a session without
+		// the pick — price by the city the customer actually chose.
+		\Opencart\System\Library\NovaPoshta\Selection::restore($this->session);
 		$senderCity   = (string)$this->config->get('shipping_nova_poshta_sender_city_ref');
 		$recipientCity= (string)($this->session->data['np_recipient_city_ref'] ?? '');
 		$key          = \Opencart\System\Library\NovaPoshta\Crypto::decrypt((string)$this->config->get('shipping_nova_poshta_api_key'));

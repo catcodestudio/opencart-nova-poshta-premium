@@ -122,7 +122,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
 		$this->load->model('setting/event');
-		foreach (['nova_poshta_premium_order_added', 'nova_poshta_premium_order_added_slash', 'nova_poshta_premium_order_history_added', 'nova_poshta_premium_order_history_added_slash', 'nova_poshta_premium_footer_inject'] as $code) {
+		foreach (['nova_poshta_premium_order_added', 'nova_poshta_premium_order_added_slash', 'nova_poshta_premium_order_edited', 'nova_poshta_premium_order_edited_slash', 'nova_poshta_premium_order_history_added', 'nova_poshta_premium_order_history_added_slash', 'nova_poshta_premium_footer_inject'] as $code) {
 			$this->model_setting_event->deleteEventByCode($code);
 		}
 		// OpenCart 4 fires model events as `model/<route>/<before|after>` — the
@@ -144,6 +144,24 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			'description' => 'Nova Poshta Premium — capture cart shipping selection on order create (OC 4.0.2.x slash separator)',
 			'trigger'     => 'catalog/model/checkout/order/addOrder/after',
 			'action'      => 'extension/nova_poshta_premium/events.orderAdded',
+			'status'      => 1,
+			'sort_order'  => 10,
+		]);
+		// OC 4 rewrites the order from the session on every confirm refresh
+		// (editOrder), so the NP address/oblast is stamped after that as well.
+		$this->model_setting_event->addEvent([
+			'code'        => 'nova_poshta_premium_order_edited',
+			'description' => 'Nova Poshta Premium — stamp the NP address and oblast after the order is rewritten (OC 4.1.x dot separator)',
+			'trigger'     => 'catalog/model/checkout/order*editOrder/after',
+			'action'      => 'extension/nova_poshta_premium/events.orderEdited',
+			'status'      => 1,
+			'sort_order'  => 10,
+		]);
+		$this->model_setting_event->addEvent([
+			'code'        => 'nova_poshta_premium_order_edited_slash',
+			'description' => 'Nova Poshta Premium — stamp the NP address and oblast after the order is rewritten (OC 4.0.2.x slash separator)',
+			'trigger'     => 'catalog/model/checkout/order/editOrder/after',
+			'action'      => 'extension/nova_poshta_premium/events.orderEdited',
 			'status'      => 1,
 			'sort_order'  => 10,
 		]);
@@ -207,7 +225,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 
 	public function uninstall(): void {
 		$this->load->model('setting/event');
-		foreach (['nova_poshta_premium_order_added', 'nova_poshta_premium_order_added_slash', 'nova_poshta_premium_order_history_added', 'nova_poshta_premium_order_history_added_slash', 'nova_poshta_premium_footer_inject'] as $code) {
+		foreach (['nova_poshta_premium_order_added', 'nova_poshta_premium_order_added_slash', 'nova_poshta_premium_order_edited', 'nova_poshta_premium_order_edited_slash', 'nova_poshta_premium_order_history_added', 'nova_poshta_premium_order_history_added_slash', 'nova_poshta_premium_footer_inject'] as $code) {
 			try { $this->model_setting_event->deleteEventByCode($code); } catch (\Throwable $e) {}
 		}
 		$this->load->model('setting/cron');

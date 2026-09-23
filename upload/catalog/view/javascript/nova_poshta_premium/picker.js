@@ -149,6 +149,8 @@
   let cityRef = '';
   let cityName = '';
   let cityArea = '';
+  // Store zone the SERVER resolved for the picked city (0 = none/unknown).
+  let serverZoneId = 0;
   let warehouses = [];
 
   // --- native OpenCart shipping-address bridge ------------------------------
@@ -254,7 +256,10 @@
       // option — always "Avtonomna Respublika Krym". Transliterate the Cyrillic
       // area and match on the normalized prefix instead. Only touch the zone on
       // a real match; never force a wrong first option.
-      const opt = matchZone(zone, cityArea);
+      // The server's answer wins (it knows Kyiv-city vs Kyiv-oblast and reads
+      // the oblast from its own directory); the local match is the fallback.
+      const opt = (serverZoneId && [...zone.options].find((o) => String(o.value) === String(serverZoneId)))
+        || matchZone(zone, cityArea);
       if (opt && zone.value !== opt.value) { zone.value = opt.value; zone.dispatchEvent(new Event('change', { bubbles: true })); }
     }
     setVal(q1(NATIVE.city),     cityName || 'Україна');
@@ -318,7 +323,7 @@
   };
 
   const pickCity = (ref, name, area) => {
-    cityRef = ref; cityName = name; cityArea = area || '';
+    cityRef = ref; cityName = name; cityArea = area || ''; serverZoneId = 0;
     cityInput().value = name;
     closeMenu(cityMenu());
     const w = whInput();
@@ -367,7 +372,7 @@
     renderSummary();
     fillNativeAddress();
     api(cfg.setSelection, { city_ref: cityRef, city_name: cityName, city_area: cityArea, warehouse_ref: ref, warehouse_name: name })
-      .then(requoteAfterPick, requoteAfterPick);
+      .then((d) => { serverZoneId = (d && d.zone_id) || 0; fillNativeAddress(); requoteAfterPick(); }, requoteAfterPick);
   };
 
   /**
@@ -465,7 +470,7 @@
   const restore = () => {
     api(cfg.getSelection).then((d) => {
       if (!d || !d.city_ref) return;
-      cityRef = d.city_ref; cityName = d.city_name || ''; cityArea = d.city_area || '';
+      cityRef = d.city_ref; cityName = d.city_name || ''; cityArea = d.city_area || ''; serverZoneId = d.zone_id || 0;
       cityInput().value = cityName;
       const w = whInput(); w.disabled = false; w.placeholder = t.whReady;
       api(cfg.getWarehouses, { city_ref: cityRef }).then((r) => { warehouses = (r && r.warehouses) || []; });
