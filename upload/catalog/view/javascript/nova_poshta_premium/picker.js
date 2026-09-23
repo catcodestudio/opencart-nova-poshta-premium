@@ -167,6 +167,34 @@
     zone:     '#input-shipping-zone',
   };
   const q1 = (s) => document.querySelector(s);
+  // The hidden native form used to get a dummy '00000' index. Other shipping
+  // methods (e.g. courier zones by postcode) read it as the customer's real
+  // index, so the placeholder is now written only for a country that really
+  // requires a postcode; otherwise the field stays empty.
+  const pcRequiredCache = {};
+  const postcodeRequired = () => {
+    const c = q1(NATIVE.country);
+    const id = c && c.value ? String(c.value) : '';
+    if (!id) return Promise.resolve(false);
+    if (!pcRequiredCache[id]) {
+      const baseEl = document.querySelector('base');
+      const base = (baseEl && baseEl.href) || (location.origin + '/');
+      pcRequiredCache[id] = fetch(base + 'index.php?route=localisation/country&country_id=' + encodeURIComponent(id), { credentials: 'same-origin' })
+        .then((r) => r.json())
+        .then((j) => String((j && j.postcode_required) || '0') === '1')
+        .catch(() => false);
+    }
+    return pcRequiredCache[id];
+  };
+  const seedPostcode = (real) => {
+    const el = q1(NATIVE.postcode);
+    if (!el) return;
+    if (real) { setVal(el, real); return; }
+    postcodeRequired().then((req) => {
+      if (req) { if (!el.value) setVal(el, '00000'); }
+      else if (/^0+$/.test(el.value || '')) setVal(el, '');
+    });
+  };
   const setVal = (el, v) => {
     if (!el) return;
     el.value = v;
@@ -264,7 +292,7 @@
     }
     setVal(q1(NATIVE.city),     cityName || 'Україна');
     setVal(q1(NATIVE.address1), whHidden().dataset.name || whHidden().value || 'Нова Пошта');
-    setVal(q1(NATIVE.postcode), '00000');
+    seedPostcode('');
     const whName = whHidden().dataset.name || '';
     fillCustomFields(whName ? `${cityName}, ${whName}` : (cityName || 'Відділення перевізника'));
   };
@@ -629,7 +657,7 @@
       // and the customer saw nothing happen on «Зберегти дані».
       if (!q1(NATIVE.city)?.value)     setVal(q1(NATIVE.city), 'Україна');
       if (!q1(NATIVE.address1)?.value) setVal(q1(NATIVE.address1), 'Відділення перевізника');
-      if (!q1(NATIVE.postcode)?.value) setVal(q1(NATIVE.postcode), '00000');
+      if (!q1(NATIVE.postcode)?.value) seedPostcode('');
       fillCustomFields('Відділення перевізника');
     }, 500);
   };
