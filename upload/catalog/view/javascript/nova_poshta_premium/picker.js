@@ -453,10 +453,15 @@
     renderSummary();
     fillNativeAddress();
     api(cfg.getWarehouses, { city_ref: ref }).then((d) => {
+      if (cityRef !== ref) return; // another city was picked meanwhile
       warehouses = (d && d.warehouses) || [];
       // No live list (manual city / API down) — the customer types the branch
       // number/name instead; never show fake demo branches.
       w.placeholder = warehouses.length ? t.whReady : 'Введіть номер або назву відділення…';
+      // The list can arrive after the customer already started typing — on One
+      // Page Checkout it waits its turn behind the contacts save. The open menu
+      // was drawn from an empty list (only «Використати: …»), so draw it again.
+      if (document.activeElement === w) renderWh(w.value);
     }).catch(() => { warehouses = []; w.placeholder = 'Введіть номер або назву відділення…'; });
   };
 
@@ -590,7 +595,10 @@
       cityRef = d.city_ref; cityName = d.city_name || ''; cityArea = d.city_area || ''; serverZoneId = d.zone_id || 0;
       cityInput().value = cityName;
       const w = whInput(); w.disabled = false; w.placeholder = t.whReady;
-      api(cfg.getWarehouses, { city_ref: cityRef }).then((r) => { warehouses = (r && r.warehouses) || []; });
+      api(cfg.getWarehouses, { city_ref: cityRef }).then((r) => {
+        warehouses = (r && r.warehouses) || [];
+        if (document.activeElement === w) renderWh(w.value);
+      });
       if (d.warehouse_ref) {
         whHidden().value = d.warehouse_ref;
         whHidden().dataset.name = d.warehouse_name || '';
