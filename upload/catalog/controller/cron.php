@@ -106,8 +106,8 @@ class Cron extends \Opencart\System\Engine\Controller {
 		if ($key === '') {
 			return;
 		}
-		$this->load->model('setting/setting');
-		\Opencart\System\Library\NovaPoshta\License::verify($this->config, $this->model_setting_setting);
+		// Not model_setting_setting: its catalog copy has no editSetting().
+		\Opencart\System\Library\NovaPoshta\License::verify($this->config, new \Opencart\System\Library\NovaPoshta\SettingStore($this->db));
 	}
 
 	public function syncCities(): void {

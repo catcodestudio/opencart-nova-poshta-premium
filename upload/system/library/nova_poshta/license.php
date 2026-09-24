@@ -88,7 +88,7 @@ class License {
 
 	/** True while Pro is unlocked by a trial key rather than a purchase. */
 	public static function trialActive($config): bool {
-		return self::trialStarted($config) > 0 && self::isPro($config);
+		return !self::isOwned($config) && self::trialStarted($config) > 0 && self::isTrialKey($config) && self::isPro($config);
 	}
 
 	/** Expiry the server reported for the current key ('' when open-ended). */
@@ -134,6 +134,7 @@ class License {
 
 		self::store($modelSetting, $config, $key, $result, [
 			'shipping_nova_poshta_trial_started' => (string)time(),
+			'shipping_nova_poshta_license_kind'  => 'trial',
 		]);
 
 		$result['key']        = $key;
@@ -142,8 +143,27 @@ class License {
 		return $result;
 	}
 
+	/** A purchased key the server confirmed once: Pro stays on for good. */
+	public static function isOwned($config): bool {
+		return self::hasKey($config) && (string)$config->get('shipping_nova_poshta_license_owned') === '1';
+	}
+
+	/** A trial key (the server sends `trial` with every answer about a known key). */
+	public static function isTrialKey($config): bool {
+		$kind = (string)$config->get('shipping_nova_poshta_license_kind');
+		if ($kind !== '') {
+			return $kind === 'trial';
+		}
+		return self::hasKey($config) && self::trialStarted($config) > 0;
+	}
+
 	/** Whether the license is currently valid (or within offline grace). */
 	public static function isPro($config): bool {
+		// A confirmed purchase is for good (an OpenCart licence is one payment,
+		// no term): no later verdict and no outage takes Pro away.
+		if (self::isOwned($config)) {
+			return true;
+		}
 		$status    = (string)$config->get('shipping_nova_poshta_license_status');
 		$checkedAt = (string)$config->get('shipping_nova_poshta_license_checked_at');
 
@@ -151,6 +171,10 @@ class License {
 			// Cache fresh enough? If never checked or stale beyond grace,
 			// premium features lock until verify() succeeds again.
 			if ($checkedAt === '') {
+				return false;
+			}
+			// A trial lasts TRIAL_DAYS from its start, offline included.
+			if (self::isTrialKey($config) && self::trialStarted($config) > 0 && self::trialDaysLeft($config) <= 0) {
 				return false;
 			}
 			$delta = (time() - (int)strtotime($checkedAt)) / 86400;
@@ -163,6 +187,9 @@ class License {
 	public static function describe($config): string {
 		$status    = (string)$config->get('shipping_nova_poshta_license_status');
 		$checkedAt = (string)$config->get('shipping_nova_poshta_license_checked_at');
+		if (self::isOwned($config)) {
+			return 'куплено — Pro назавжди';
+		}
 		if ($status === '') {
 			return 'не перевірено';
 		}
@@ -236,9 +263,11 @@ class License {
 		$current['shipping_nova_poshta_license_checked_at'] = '';
 		$current['shipping_nova_poshta_license_expires_at'] = '';
 		$current['shipping_nova_poshta_license_data']       = '';
+		$current['shipping_nova_poshta_license_owned']      = '';
+		$current['shipping_nova_poshta_license_kind']       = '';
 		$modelSetting->editSetting('shipping_nova_poshta', $current);
 
-		foreach (['key', 'status', 'checked_at', 'expires_at', 'data'] as $suffix) {
+		foreach (['key', 'status', 'checked_at', 'expires_at', 'data', 'owned', 'kind'] as $suffix) {
 			$config->set('shipping_nova_poshta_license_' . $suffix, '');
 		}
 		return $result;
@@ -365,6 +394,20 @@ class License {
 		return $http === 0 || $http >= 500;
 	}
 
+	/** The server sends a boolean `trial` with every answer about a known key. */
+	private static function kindOf(array $result, array $extra) {
+		if (isset($extra['shipping_nova_poshta_license_kind'])) {
+			return (string)$extra['shipping_nova_poshta_license_kind'];
+		}
+		if (array_key_exists('trial', $result)) {
+			return !empty($result['trial']) ? 'trial' : 'purchase';
+		}
+		if (!empty($result['is_trial'])) {
+			return 'trial';
+		}
+		return '';
+	}
+
 	/**
 	 * Persist key + status + raw response to OC settings.
 	 *
@@ -379,6 +422,12 @@ class License {
 		$current = $modelSetting->getSetting('shipping_nova_poshta');
 		if (!is_array($current)) { $current = []; }
 
+		// A new key starts a new history: the "purchased" latch belongs to the key.
+		if (trim((string)(isset($current['shipping_nova_poshta_license_key']) ? $current['shipping_nova_poshta_license_key'] : '')) !== $key) {
+			$current['shipping_nova_poshta_license_owned'] = '';
+			$current['shipping_nova_poshta_license_kind']  = '';
+		}
+
 		$outage = self::isTransportFailure($result)
 			&& trim((string)($current['shipping_nova_poshta_license_key'] ?? '')) !== '';
 
@@ -389,6 +438,15 @@ class License {
 			$current['shipping_nova_poshta_license_status']     = !empty($result['ok']) ? 'valid' : 'invalid';
 			$current['shipping_nova_poshta_license_checked_at'] = (string)($result['verified_at'] ?? date('Y-m-d H:i:s'));
 			$current['shipping_nova_poshta_license_expires_at'] = (string)($result['expires_at'] ?? '');
+
+			$kind = self::kindOf($result, $extra);
+			if ($kind !== '') {
+				$current['shipping_nova_poshta_license_kind'] = $kind;
+			}
+			if ($kind === 'purchase' && !empty($result['ok'])) {
+				$current['shipping_nova_poshta_license_owned'] = '1';
+			}
+			// No later verdict takes a confirmed purchase back.
 		}
 
 		foreach ($extra as $k => $v) {
@@ -403,6 +461,60 @@ class License {
 			if (strpos($k, 'shipping_nova_poshta_license') === 0 || $k === 'shipping_nova_poshta_trial_started') {
 				$config->set($k, $v);
 			}
+		}
+	}
+}
+
+/**
+ * Settings reader/writer for the storefront side (cron, callbacks).
+ *
+ * The catalog copy of model setting/setting has no editSetting() in any
+ * OpenCart version: 4.0 and 4.1 throw from Proxy::__call, 3.x and 2.3 exit().
+ * The daily licence re-check runs from cron on that side, so it never saved
+ * its answer, and on OpenCart 4 the exception also ended the whole cron pass.
+ * Here every changed key is written as its own row; the rest of the group is
+ * left alone.
+ */
+final class SettingStore {
+	private $db;
+
+	public function __construct($db) {
+		$this->db = $db;
+	}
+
+	public function getSetting($code, $store_id = 0) {
+		$data  = array();
+		$query = $this->db->query("SELECT `key`, `value`, `serialized` FROM `" . DB_PREFIX . "setting` WHERE `store_id` = '" . (int)$store_id . "' AND `code` = '" . $this->db->escape((string)$code) . "'");
+
+		foreach ($query->rows as $row) {
+			$data[$row['key']] = $row['serialized'] ? json_decode($row['value'], true) : $row['value'];
+		}
+
+		return $data;
+	}
+
+	public function editSetting($code, array $data, $store_id = 0) {
+		$code = (string)$code;
+		$old  = $this->getSetting($code, $store_id);
+
+		foreach ($data as $key => $value) {
+			if (substr((string)$key, 0, strlen($code)) !== $code) {
+				continue;
+			}
+
+			$serialized = is_array($value) ? 1 : 0;
+			$stored     = $serialized ? json_encode($value) : (string)$value;
+
+			if (array_key_exists($key, $old)) {
+				$was = is_array($old[$key]) ? json_encode($old[$key]) : (string)$old[$key];
+
+				if ($was === $stored) {
+					continue;
+				}
+			}
+
+			$this->db->query("DELETE FROM `" . DB_PREFIX . "setting` WHERE `store_id` = '" . (int)$store_id . "' AND `code` = '" . $this->db->escape($code) . "' AND `key` = '" . $this->db->escape((string)$key) . "'");
+			$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '" . (int)$store_id . "', `code` = '" . $this->db->escape($code) . "', `key` = '" . $this->db->escape((string)$key) . "', `value` = '" . $this->db->escape($stored) . "', `serialized` = '" . $serialized . "'");
 		}
 	}
 }
