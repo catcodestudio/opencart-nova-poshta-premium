@@ -54,6 +54,6 @@
 - НП Глобал (cross-border) — поки тільки domestic.
 
 ## Ліцензія + підтримка
-Власницький. **₴2 990 одноразово, ліцензія назавжди — без щорічних списань і підписок.** Оновлення модуля для лінії OpenCart 4.x входять у ціну на весь час володіння ліцензією. Ключ на 2 домени (production + staging). Купити: https://catcode.com.ua/modules/opencart-nova-poshta-premium
+Власницький. **₴2 990 одноразово, ліцензія назавжди — без щорічних списань і підписок.** Оновлення модуля для лінії OpenCart 4.x входять у ціну на весь час володіння ліцензією. Ключ на 2 домени (production + staging). Купити: https://catcode.com.ua/modules/opencart-nova-poshta-premium/
 
 Баги + feature requests через контактну форму на vendor сайті. SLA: 48h business-day response.

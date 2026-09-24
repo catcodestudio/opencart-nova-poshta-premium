@@ -47,7 +47,7 @@ If review fails, fix the issue, bump `install.json` version, and re-submit. Use 
 
 ### 2. Vendor site (secondary, higher margin)
 
-Sell directly from `catcode.com.ua/modules/opencart-nova-poshta-premium` (not yet built). Skip 20% marketplace cut.
+Sell directly from `catcode.com.ua/modules/opencart-nova-poshta-premium/` (not yet built). Skip 20% marketplace cut.
 
 Suggested page structure:
 - Hero — tagline from `sales-copy-en.md`
