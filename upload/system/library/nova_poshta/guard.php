@@ -4,11 +4,12 @@ namespace Opencart\System\Library\NovaPoshta;
 /**
  * Circuit breaker for api.novaposhta.ua, shared by every request of the shop.
  *
- * On 01.10.2026 the Nova Poshta API hung for about two and a half hours: it
- * accepted connections and never answered. Every checkout step that asked it
- * something sat out the whole cURL timeout, PHP workers piled up behind those
- * requests and the shop went down with the API — the storefront, the admin,
- * everything on the same pool.
+ * When the Nova Poshta API stops answering, every checkout step that asks it
+ * something sits out the whole cURL timeout (15 s per call before 1.2.28 /
+ * 1.3.13 / 1.3.10), PHP workers pile up behind those requests and the shop goes
+ * down with the API — the storefront, the admin, everything on the same pool.
+ * Measured on a local stand with 5 php-fpm workers: 8 buyers at once kept the
+ * home page waiting 13–16 s.
  *
  * After FAILS_TO_OPEN consecutive transport failures (timeout, refused
  * connection, 5xx, a non-JSON page) the module stops calling the API for
