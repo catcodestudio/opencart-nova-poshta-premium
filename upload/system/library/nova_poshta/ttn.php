@@ -124,7 +124,7 @@ final class Ttn {
 			$payCode = is_array($pm) ? (string)($pm['code'] ?? '') : '';
 		}
 		$isCod = ($payCode === 'cod' || strpos($payCode, 'cod.') === 0);
-		$codAmount = (License::isPro($config) && $isCod) ? $cost : 0.0;
+		$codAmount = (License::isPro($config) && $isCod) ? self::codBase($db, $order_id, $cost) : 0.0;
 
 		$resp = $client->createTTN([
 			'sender_ref'              => $sender['ref'],
@@ -181,6 +181,30 @@ final class Ttn {
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * Cash on delivery = what the buyer owes the shop: the order total minus the
+	 * delivery lines (PayerType Recipient — the buyer pays Nova Poshta for the
+	 * delivery at the branch). Coupons, vouchers, store credit, taxes and fees
+	 * are in the total; the bare sum of product prices is not what the buyer
+	 * agreed to pay (a -10% coupon was collected in full). Falls back to that
+	 * sum only for an order without totals.
+	 */
+	private static function codBase($db, int $order_id, float $fallback): float {
+		$total = null;
+		$ship  = 0.0;
+		foreach ($db->query("SELECT `code`, `value` FROM `" . DB_PREFIX . "order_total` WHERE order_id = " . $order_id)->rows as $t) {
+			if ($t['code'] === 'total') {
+				$total = (float)$t['value'];
+			} elseif ($t['code'] === 'shipping') {
+				$ship += (float)$t['value'];
+			}
+		}
+		if ($total === null) {
+			return $fallback;
+		}
+		return max(0.0, round($total - $ship, 2));
 	}
 
 	private static function queue($db, array $row, string $why): array {

@@ -211,7 +211,14 @@ class Cache {
 		if ($cost <= 0 || !self::isRef($sender) || !self::isRef($recipient)) {
 			return;
 		}
-		$sql = "INSERT INTO `" . DB_PREFIX . "np_rate_cache` SET sender_city_ref = '" . $db->escape($sender) . "', recipient_city_ref = '" . $db->escape($recipient) . "', weight_kg = " . self::weightKey($weightKg) . ", cost = " . (float)$cost . ", updated_at = NOW() ON DUPLICATE KEY UPDATE cost = VALUES(cost), updated_at = VALUES(updated_at)";
+		// Both refs are validated UUIDs (isRef), so they go into the SQL as they are,
+		// without $db->escape(): on OpenCart 4.0.2.x with the PDO driver escape()
+		// binds a parameter, and a statement that fails (table missing — files
+		// updated without «Setup») leaves that parameter bound for the next query
+		// of the request. The retry below and, at the end of the request, the
+		// session write then fail too — measured on 4.0.2.3/PDO: the live tariff
+		// was quoted but the order got the flat price.
+		$sql = "INSERT INTO `" . DB_PREFIX . "np_rate_cache` SET sender_city_ref = '" . strtolower($sender) . "', recipient_city_ref = '" . strtolower($recipient) . "', weight_kg = " . self::weightKey($weightKg) . ", cost = " . (float)$cost . ", updated_at = NOW() ON DUPLICATE KEY UPDATE cost = VALUES(cost), updated_at = VALUES(updated_at)";
 		try {
 			$db->query($sql);
 		} catch (\Throwable $e) {
@@ -231,7 +238,8 @@ class Cache {
 			return null;
 		}
 		try {
-			$row = $db->query("SELECT cost FROM `" . DB_PREFIX . "np_rate_cache` WHERE sender_city_ref = '" . $db->escape($sender) . "' AND recipient_city_ref = '" . $db->escape($recipient) . "' AND weight_kg = " . self::weightKey($weightKg))->row;
+			// No escape() here either (validated refs) — see rememberRate().
+			$row = $db->query("SELECT cost FROM `" . DB_PREFIX . "np_rate_cache` WHERE sender_city_ref = '" . strtolower($sender) . "' AND recipient_city_ref = '" . strtolower($recipient) . "' AND weight_kg = " . self::weightKey($weightKg))->row;
 		} catch (\Throwable $e) {
 			return null;
 		}
