@@ -110,6 +110,12 @@ final class Ttn {
 			$db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET recipient_city_ref = '" . $db->escape($cityRef) . "', recipient_warehouse_ref = '" . $db->escape($whRef) . "' WHERE shipment_id = " . $shipId);
 		}
 
+		if ($interactive && Guard::degraded()) {
+			// Somebody is waiting on this request and the API has just failed: queue
+			// now, the retry creates the waybill once a call gets through.
+			return self::queue($db, $row, 'API Нової Пошти недоступне');
+		}
+
 		// Cash on delivery is Pro. OpenCart 4.0.2+ stores the payment method as
 		// JSON ({"code":"cod.cod"}); older 4.0 kept a payment_code column.
 		$payCode = (string)($order['payment_code'] ?? '');

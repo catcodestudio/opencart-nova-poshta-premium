@@ -4,6 +4,7 @@ namespace Opencart\Catalog\Model\Extension\NovaPoshtaPremium\Shipping;
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/client.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/crypto.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/cache.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/guard.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/selection.php';
 
 class NovaPoshta extends \Opencart\System\Engine\Model {
@@ -42,6 +43,12 @@ class NovaPoshta extends \Opencart\System\Engine\Model {
 			$weight = $this->cartWeightKg();
 			$value  = $this->cartValue();
 			$memo   = $senderCity . '|' . $recipientCity . '|' . $weight . '|' . $value;
+			\Opencart\System\Library\NovaPoshta\Guard::bind($this->db);
+			if (!array_key_exists($memo, self::$quoted) && \Opencart\System\Library\NovaPoshta\Guard::degraded()) {
+				// The API just failed and nothing has cleared it: don't make the buyer
+				// sit out another timeout for a price we can take from the memo.
+				self::$quoted[$memo] = \Opencart\System\Library\NovaPoshta\Cache::lastRate($this->db, $senderCity, $recipientCity, $weight);
+			}
 			if (!array_key_exists($memo, self::$quoted)) {
 				$live   = null;
 				$client = new \Opencart\System\Library\NovaPoshta\Client($key, $this->db);

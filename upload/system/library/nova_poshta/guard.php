@@ -19,6 +19,13 @@ namespace Opencart\System\Library\NovaPoshta;
  * skipping it for PROBE_SECONDS); one success closes the breaker, one failure
  * opens it again.
  *
+ * Before it opens the shop is «degraded» (a failure nothing has cleared yet,
+ * for at most DEGRADED_SECONDS): the requests a buyer waits on at the end of
+ * the checkout — the tariff and the waybill at «Confirm order» — skip the API
+ * and take the fallback (last tariff / TTN queue) instead of paying another
+ * timeout. Measured: without it the first buyer of an outage sat out three
+ * 6 s timeouts (~19 s) before the breaker opened.
+ *
  * The state is one row of its own table, changed by single atomic UPDATEs:
  * a burst of buyers hitting a hung API fails at the same moment, and a
  * read-modify-write counter would lose most of those failures (measured: the
@@ -31,6 +38,7 @@ final class Guard {
 	public const FAILS_TO_OPEN = 3;
 	public const OPEN_SECONDS  = 300;
 	public const PROBE_SECONDS = 20;
+	public const DEGRADED_SECONDS = 600;
 
 	private static $db = null;
 	private static ?array $state = null;
@@ -121,6 +129,25 @@ final class Guard {
 			self::$probing = true;
 		}
 		return true;
+	}
+
+	/**
+	 * The breaker is open (inside its pause), or the last call failed and
+	 * nothing has succeeded since, within DEGRADED_SECONDS of the first failure.
+	 * Once a pause is over this is false again, so the next tariff request may
+	 * be the probe — otherwise a shop with a full directory and no queue might
+	 * never ask the API again until the weekly cron.
+	 */
+	public static function degraded(): bool {
+		if (!self::$db) {
+			return false;
+		}
+		$s = self::load();
+		$now = time();
+		if ($s['open_until'] > $now) {
+			return true;
+		}
+		return $s['fails'] > 0 && $s['fails'] < self::FAILS_TO_OPEN && $s['since'] > $now - self::DEGRADED_SECONDS;
 	}
 
 	/** Would a call be allowed now? (Does not claim the probe slot.) */
