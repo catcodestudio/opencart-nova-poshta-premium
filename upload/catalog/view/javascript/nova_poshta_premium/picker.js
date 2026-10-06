@@ -498,6 +498,29 @@
     openMenu(menu);
   };
 
+  // setSelection requests in flight. While one is pending the session does not
+  // carry the branch yet: «Confirm order» waits (confirm gate) and the method
+  // re-save waits (whenIdle), otherwise the order was built without the branch.
+  let npPending = 0;
+  let chainBusy = false;
+  // The payment step waits too: opened in that window it read a session in
+  // which «Зберегти дані» had just cleared the shipping method and showed
+  // «Shipping method required!» until the buyer closed and reopened it.
+  const syncBusy = () => {
+    const busy = npPending > 0 || chainBusy;
+    document.querySelectorAll('#button-payment-methods').forEach((b) => {
+      if (busy && !b.disabled) { b.disabled = true; b.dataset.npBusy = '1'; }
+      if (!busy && b.dataset.npBusy) { b.disabled = false; delete b.dataset.npBusy; }
+    });
+    if (window.__ccGateRefresh) window.__ccGateRefresh();
+  };
+  const postSelection = (body) => {
+    npPending++;
+    const settle = () => { npPending = Math.max(0, npPending - 1); syncBusy(); };
+    syncBusy();
+    return api(cfg.setSelection, body).then((d) => { settle(); return d; }, (e) => { settle(); throw e; });
+  };
+
   const pickWh = (ref, name) => {
     whInput().value = name;
     whHidden().value = ref;
@@ -505,7 +528,7 @@
     closeMenu(whMenu());
     renderSummary();
     fillNativeAddress();
-    api(cfg.setSelection, { city_ref: cityRef, city_name: cityName, city_area: cityArea, warehouse_ref: ref, warehouse_name: name })
+    postSelection({ city_ref: cityRef, city_name: cityName, city_area: cityArea, warehouse_ref: ref, warehouse_name: name })
       .then((d) => { serverZoneId = (d && d.zone_id) || 0; fillNativeAddress(); requoteAfterPick(); }, requoteAfterPick);
   };
 
@@ -525,33 +548,74 @@
     // picker fills raise `change` inside its forms) and re-saves both methods in
     // its own serial queue; a second, parallel save from here races it.
     if (document.getElementById('cc-op')) return;
-    const shipCode = selectedShippingCode();
-    if (shipCode.indexOf('nova_poshta.') !== 0) return;
+    if (selectedShippingCode().indexOf('nova_poshta.') !== 0) return;
+    resaveMethods(true);
+  };
+
+  // --- re-save the chosen methods: one chain at a time, on an idle checkout ---
+  // OpenCart writes the WHOLE session back when a request ends. Stock 4.1
+  // reloads the confirm block right after «Зберегти дані»; when our quote
+  // finished before that reload, the reload put back a session without the
+  // quote list and shipping_method.save answered «Shipping method required!»
+  // (empty payment list) — every time the quote was fast: live rate off, a
+  // typed city, the API down. So the chain starts only when no jQuery request
+  // of the checkout and no setSelection is in flight, runs alone (a second
+  // trigger re-runs it once afterwards) and repeats a save the core refused.
+  let chainAgain = null;
+  const whenIdle = (fn) => {
+    const t0 = Date.now();
+    const tick = () => {
+      const idle = !npPending && !(window.jQuery && window.jQuery.active);
+      if (idle || Date.now() - t0 > 15000) fn(); else setTimeout(tick, 60);
+    };
+    setTimeout(tick, 0);
+  };
+  const resaveMethods = (onlyNp) => {
+    if (chainBusy) { chainAgain = chainAgain === null ? onlyNp : (chainAgain && onlyNp); return; }
     const $ = window.jQuery;
+    if (!$) return;
+    chainBusy = true;
+    window.__ccRestoringMethods = true;
+    syncBusy();
     const langParam = new URLSearchParams(location.search).get('language');
     const L = langParam ? '&language=' + encodeURIComponent(langParam) : '';
     const U = (r) => 'index.php?route=' + r + L;
-    const payCode = ($('#input-payment-code').val() || '').trim();
-    const reloadConfirm = () => $('#checkout-confirm').load(U('checkout/confirm.confirm'), () => { if (window.__ccGateRefresh) window.__ccGateRefresh(); });
-    const restorePayment = () => {
-      // `shipping_method.save` clears the chosen payment method server-side.
-      if (!payCode) return reloadConfirm();
-      $.ajax({ url: U('checkout/payment_method.getMethods'), dataType: 'json' }).done((pm) => {
-        let plabel = '';
-        const groups = (pm && pm.payment_methods) || {};
-        for (const i in groups) { const opt = groups[i].option || {}; for (const k in opt) if (opt[k].code === payCode) plabel = opt[k].name; }
-        $.ajax({ url: U('checkout/payment_method.save'), type: 'post', data: { payment_method: payCode }, dataType: 'json' })
-          .always(() => { if (plabel) $('#input-payment-method').val(plabel); reloadConfirm(); });
-      }).fail(reloadConfirm);
+    const finish = () => {
+      chainBusy = false;
+      window.__ccRestoringMethods = false;
+      if (chainAgain !== null) { const again = chainAgain; chainAgain = null; resaveMethods(again); return; }
+      syncBusy();
     };
-    $.ajax({ url: U('checkout/shipping_method.quote'), dataType: 'json' }).done((q) => {
-      let label = '';
-      const methods = (q && q.shipping_methods) || {};
-      for (const i in methods) { const quotes = methods[i].quote || {}; for (const j in quotes) if (quotes[j].code === shipCode) label = quotes[j].name + ' - ' + quotes[j].text; }
-      if (!label) return; // carrier no longer quotable for this address — leave the session alone
-      $.ajax({ url: U('checkout/shipping_method.save'), type: 'post', data: { shipping_method: shipCode }, dataType: 'json' })
-        .always(() => { $('#input-shipping-method').val(label); restorePayment(); });
-    });
+    const run = (attempt) => {
+      const shipCode = ($('#input-shipping-code').val() || '').trim() || selectedShippingCode();
+      const payCode = ($('#input-payment-code').val() || '').trim();
+      if (!shipCode || (onlyNp && shipCode.indexOf('nova_poshta.') !== 0)) return finish();
+      const retry = () => { if (attempt < 3) { whenIdle(() => run(attempt + 1)); return true; } return false; };
+      const reloadConfirm = () => $('#checkout-confirm').load(U('checkout/confirm.confirm'), finish);
+      const restorePayment = () => {
+        // `shipping_method.save` clears the chosen payment method server-side.
+        if (!payCode) return reloadConfirm();
+        $.ajax({ url: U('checkout/payment_method.getMethods'), dataType: 'json' }).done((pm) => {
+          if (pm && pm.error && retry()) return;
+          let plabel = '';
+          const groups = (pm && pm.payment_methods) || {};
+          for (const i in groups) { const opt = groups[i].option || {}; for (const k in opt) if (opt[k].code === payCode) plabel = opt[k].name; }
+          $.ajax({ url: U('checkout/payment_method.save'), type: 'post', data: { payment_method: payCode }, dataType: 'json' })
+            .done((r) => { if (r && r.error && retry()) return; if (plabel) $('#input-payment-method').val(plabel); reloadConfirm(); })
+            .fail(reloadConfirm);
+        }).fail(reloadConfirm);
+      };
+      $.ajax({ url: U('checkout/shipping_method.quote'), dataType: 'json' }).done((q) => {
+        let label = '';
+        const methods = (q && q.shipping_methods) || {};
+        for (const i in methods) { const quotes = methods[i].quote || {}; for (const j in quotes) if (quotes[j].code === shipCode) label = quotes[j].name + ' - ' + quotes[j].text; }
+        if (!label) return finish(); // carrier no longer quotable for this address — leave the session alone
+        $.ajax({ url: U('checkout/shipping_method.save'), type: 'post', data: { shipping_method: shipCode }, dataType: 'json' })
+          .done((r) => { if (r && r.error && retry()) return; $('#input-shipping-method').val(label); restorePayment(); })
+          .fail(() => { $('#input-shipping-method').val(label); restorePayment(); });
+      }).fail(finish);
+    };
+    whenIdle(() => run(1));
   };
 
   // keyboard navigation within a menu
@@ -619,7 +683,7 @@
         // Re-persist into the session so a fresh checkout that merely *restores*
         // a prior choice (e.g. after login/guest save) still carries the NP
         // selection into the order on confirm.
-        api(cfg.setSelection, { city_ref: cityRef, city_name: cityName, city_area: cityArea, warehouse_ref: d.warehouse_ref, warehouse_name: d.warehouse_name || '' });
+        postSelection({ city_ref: cityRef, city_name: cityName, city_area: cityArea, warehouse_ref: d.warehouse_ref, warehouse_name: d.warehouse_name || '' }).catch(() => {});
       }
       fillNativeAddress();
     }).catch(() => {});
@@ -684,6 +748,8 @@
     // the seeded placeholder (city «Україна», first zone) instead of a branch.
     window.__ccGatePredicates.push(() =>
       selectedShippingCode().indexOf('nova_poshta.') !== 0 || !!whHidden().value);
+    // …and the server has it: no setSelection or method re-save in flight.
+    window.__ccGatePredicates.push(() => !npPending && !chainBusy);
     if (!window.__ccAddrPredicate) {
       window.__ccAddrPredicate = true;
       window.__ccGatePredicates.push(() => window.__ccNativeAddr.ok(
@@ -737,38 +803,13 @@
     if (document.getElementById('cc-op')) return;
     window.__ccMethodPersistWired = true;
     const $ = window.jQuery;
-    const langParam = new URLSearchParams(location.search).get('language');
-    const L = langParam ? '&language=' + encodeURIComponent(langParam) : '';
-    const U = (r) => 'index.php?route=' + r + L;
-
     $(document).ajaxSuccess((e, xhr, settings) => {
       if ((((settings && settings.url) || '')).indexOf('register.save') === -1) return;
       let ok = false; try { ok = !!(JSON.parse(xhr.responseText) || {}).success; } catch (err) { /* not json */ }
-      if (!ok || window.__ccRestoringMethods) return;
-      const shipCode = ($('#input-shipping-code').val() || '').trim();
-      const payCode = ($('#input-payment-code').val() || '').trim();
-      if (!shipCode) return; // no carrier was chosen before saving contacts
-      window.__ccRestoringMethods = true;
-      const done = () => { window.__ccRestoringMethods = false; if (window.__ccGateRefresh) window.__ccGateRefresh(); };
-      const reloadConfirm = () => { $('#checkout-confirm').load(U('checkout/confirm.confirm'), done); };
-      const restorePayment = () => {
-        if (!payCode) return reloadConfirm();
-        $.ajax({ url: U('checkout/payment_method.getMethods'), dataType: 'json' }).done((pm) => {
-          let plabel = '';
-          const groups = (pm && pm.payment_methods) || {};
-          for (const i in groups) { const opt = groups[i].option || {}; for (const k in opt) if (opt[k].code === payCode) plabel = opt[k].name; }
-          $.ajax({ url: U('checkout/payment_method.save'), type: 'post', data: { payment_method: payCode }, dataType: 'json' })
-            .always(() => { if (plabel) $('#input-payment-method').val(plabel); reloadConfirm(); });
-        }).fail(reloadConfirm);
-      };
-      $.ajax({ url: U('checkout/shipping_method.quote'), dataType: 'json' }).done((q) => {
-        let label = '';
-        const methods = (q && q.shipping_methods) || {};
-        for (const i in methods) { const quotes = methods[i].quote || {}; for (const j in quotes) if (quotes[j].code === shipCode) label = quotes[j].name + ' - ' + quotes[j].text; }
-        if (!label) return done(); // carrier no longer quotable for the saved address
-        $.ajax({ url: U('checkout/shipping_method.save'), type: 'post', data: { shipping_method: shipCode }, dataType: 'json' })
-          .always(() => { $('#input-shipping-method').val(label); restorePayment(); });
-      }).fail(done);
+      if (!ok) return;
+      if (!($('#input-shipping-code').val() || '').trim()) return; // no carrier was chosen before saving contacts
+      // The core's own confirm reload is in flight now — resaveMethods waits for it.
+      resaveMethods(false);
     });
   };
 

@@ -27,7 +27,9 @@ class Checkout extends \Opencart\System\Engine\Controller {
 			$this->jsonResponse(['cities' => []]);
 			return;
 		}
-		$this->jsonResponse(['cities' => \Opencart\System\Library\NovaPoshta\Cache::searchCities($this->db, $query, $this->apiKey())]);
+		$cities = \Opencart\System\Library\NovaPoshta\Cache::searchCities($this->db, $query, $this->apiKey());
+		$this->reloadSession();
+		$this->jsonResponse(['cities' => $cities]);
 	}
 
 	public function getWarehouses(): void {
@@ -36,7 +38,31 @@ class Checkout extends \Opencart\System\Engine\Controller {
 			$this->jsonResponse(['warehouses' => []]);
 			return;
 		}
-		$this->jsonResponse(['warehouses' => \Opencart\System\Library\NovaPoshta\Cache::getWarehouses($this->db, $cityRef, $this->apiKey())]);
+		$warehouses = \Opencart\System\Library\NovaPoshta\Cache::getWarehouses($this->db, $cityRef, $this->apiKey());
+		$this->reloadSession();
+		$this->jsonResponse(['warehouses' => $warehouses]);
+	}
+
+	/**
+	 * Re-reads the session from storage before this request ends.
+	 *
+	 * OpenCart writes the WHOLE session back when a request ends — the copy it
+	 * read when the request started. A widget request that waited on the Nova
+	 * Poshta API (up to 6–8 s while it doesn't answer) therefore put back the
+	 * session as it was before a parallel «Зберегти дані»: measured on 4.1 and
+	 * 4.0.2.3, the order was then placed with an empty name, e-mail and phone.
+	 * Reloading after the slow part makes the final write carry what the other
+	 * requests saved meanwhile; only the keys this request sets go on top.
+	 */
+	private function reloadSession(): void {
+		try {
+			$id = (string)$this->session->getId();
+			if ($id !== '') {
+				$this->session->start($id);
+			}
+		} catch (\Throwable $e) {
+			// Keep this request's copy rather than break the widget.
+		}
 	}
 
 	public function setSelection(): void {
@@ -51,56 +77,85 @@ class Checkout extends \Opencart\System\Engine\Controller {
 		if ($dirArea !== '') {
 			$city_area = $dirArea;
 		}
-		$this->session->data['np_recipient_city_ref']       = $city_ref;
-		$this->session->data['np_recipient_city_name']      = $city_name;
-		$this->session->data['np_recipient_city_area']      = $city_area;
-		$this->session->data['np_recipient_warehouse_ref']  = $wh_ref;
-		$this->session->data['np_recipient_warehouse_name'] = $wh_name;
+		$sel = [
+			'np_recipient_city_ref'       => $city_ref,
+			'np_recipient_city_name'      => $city_name,
+			'np_recipient_city_area'      => $city_area,
+			'np_recipient_warehouse_ref'  => $wh_ref,
+			'np_recipient_warehouse_name' => $wh_name,
+		];
+		$this->applySelection($sel);
 		\Opencart\System\Library\NovaPoshta\Selection::remember($this->session);
-		$this->applyToShippingAddress();
-		// The rate is keyed by the recipient city, so the quote list the core
-		// cached when the carrier was picked (no city yet — hence the flat
-		// fallback) must not survive the pick: `shipping_method.save` validates
-		// against this cache, so a stale entry would re-save the old price.
-		unset($this->session->data['shipping_methods']);
-		$this->requoteChosenMethod();
+		// Publish the pick right away: the quote below may wait on the API for
+		// seconds, and an order confirmed in that window was built without the
+		// branch (no shipment row, no waybill) — measured on 4.1, API hanging.
+		try {
+			$this->session->close();
+		} catch (\Throwable $e) {
+			// The end-of-request write still happens.
+		}
+		$quote = $this->quoteNovaPoshta();
+		// The quote is the slow part: take what parallel requests saved meanwhile
+		// (the customer's contacts above all) and put only our keys on top.
+		$this->reloadSession();
+		$this->applySelection($sel);
+		// The rate is keyed by the recipient city, so the quote the core cached
+		// when the carrier was picked (no city yet — hence the flat fallback)
+		// must not survive the pick: `shipping_method.save` validates against the
+		// cached list, so a stale entry would re-save the old price.
+		if ($quote) {
+			if (isset($this->session->data['shipping_methods']['nova_poshta']['quote'])) {
+				$this->session->data['shipping_methods']['nova_poshta']['quote']['nova_poshta'] = $quote;
+			}
+			if (strpos((string)($this->session->data['shipping_method']['code'] ?? ''), 'nova_poshta.') === 0) {
+				$this->session->data['shipping_method'] = $quote;
+			}
+		} else {
+			unset($this->session->data['shipping_methods']['nova_poshta']);
+		}
 		$zone = $this->resolveZone($city_area, $city_name);
 		$this->jsonResponse([
 			'ok'      => true,
 			'zone_id' => $zone ? (int)$zone['zone_id'] : 0,
-			'cost'    => (float)($this->session->data['shipping_method']['cost'] ?? 0),
+			'cost'    => (float)($this->session->data['shipping_method']['cost'] ?? ($quote['cost'] ?? 0)),
 		]);
 	}
 
+	private function applySelection(array $sel): void {
+		foreach ($sel as $k => $v) {
+			$this->session->data[$k] = $v;
+		}
+		$this->applyToShippingAddress();
+	}
+
 	/**
-	 * Re-prices the ALREADY CHOSEN Nova Poshta method on the server.
+	 * Prices Nova Poshta for the city that was just picked, without writing the
+	 * session (the caller applies the result to a freshly read copy).
 	 *
 	 * The carrier is usually picked before the branch (the widget opens only
 	 * then), so session['shipping_method'] holds a quote made without the
 	 * recipient city. The widget re-saves the method on the stock checkout, but
 	 * a theme or one-page checkout that doesn't re-save would still carry the
 	 * stale price into the order — the confirm step reads the session entry, not
-	 * the rendered list. Replacing it here makes the price independent of the
-	 * front end. The payment method is left untouched.
+	 * the rendered list. Replacing it makes the price independent of the front
+	 * end. Only while Nova Poshta is the chosen method or in the quoted list.
 	 */
-	private function requoteChosenMethod(): void {
-		$chosen = $this->session->data['shipping_method'] ?? null;
-		if (!is_array($chosen) || strpos((string)($chosen['code'] ?? ''), 'nova_poshta.') !== 0) {
-			return;
+	private function quoteNovaPoshta(): ?array {
+		$chosen = (string)($this->session->data['shipping_method']['code'] ?? '');
+		if (strpos($chosen, 'nova_poshta.') !== 0 && !isset($this->session->data['shipping_methods']['nova_poshta'])) {
+			return null;
 		}
 		$address = $this->session->data['shipping_address'] ?? null;
 		if (!is_array($address) || !isset($address['country_id'])) {
-			return;
+			return null;
 		}
 		try {
 			$this->load->model('extension/nova_poshta_premium/shipping/nova_poshta');
 			$quote = $this->model_extension_nova_poshta_premium_shipping_nova_poshta->getQuote($address);
 		} catch (\Throwable $e) {
-			return;
+			return null;
 		}
-		if (!empty($quote['quote']['nova_poshta']) && is_array($quote['quote']['nova_poshta'])) {
-			$this->session->data['shipping_method'] = $quote['quote']['nova_poshta'];
-		}
+		return (!empty($quote['quote']['nova_poshta']) && is_array($quote['quote']['nova_poshta'])) ? $quote['quote']['nova_poshta'] : null;
 	}
 
 	/**

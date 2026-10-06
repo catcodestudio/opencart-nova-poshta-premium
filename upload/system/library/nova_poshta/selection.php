@@ -28,10 +28,14 @@ class Selection {
 		foreach (self::KEYS as $k) {
 			$sel[$k] = (string)($session->data['np_recipient_' . $k] ?? '');
 		}
+		$value = base64_encode((string)json_encode($sel));
+		// restore() later in THIS request (the re-quote in setSelection) must see
+		// the new pick, not the one the browser sent — that priced the old city.
+		$_COOKIE[self::COOKIE] = $value;
 		if (headers_sent()) {
 			return;
 		}
-		setcookie(self::COOKIE, base64_encode((string)json_encode($sel)), [
+		setcookie(self::COOKIE, $value, [
 			'expires'  => time() + 86400,
 			'path'     => '/',
 			'secure'   => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
