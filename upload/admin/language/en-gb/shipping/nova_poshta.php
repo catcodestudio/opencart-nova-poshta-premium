@@ -98,3 +98,7 @@ $_['text_license_err_trial_used_site']  = 'A trial has already been issued for t
 $_['text_license_err_no_pro_version']   = 'This module has no Pro version.';
 $_['text_license_err_rate_limited']     = 'Too many attempts. Try again in an hour.';
 $_['text_license_err_no_curl']          = 'PHP has no cURL, so the licence cannot be checked. Ask your host to enable the extension.';
+
+// API outage
+$_['text_api_down'] = 'The Nova Poshta API has not been responding since %s (%s). The shop keeps working: cities and branches come from the saved directory, the price is the last known tariff or the cost from these settings, and waybills are queued and created automatically once the API is back. Next check at %s; «Test connection» checks right away.';
+$_['text_ttn_queued'] = 'Waybills in the queue: %s — the Nova Poshta API did not answer when they were due. They will be created automatically (hourly cron or opening the Shipments page).';

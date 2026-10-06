@@ -4,6 +4,7 @@ namespace Opencart\Admin\Controller\Extension\NovaPoshtaPremium;
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/client.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/crypto.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/license.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/ttn.php';
 
 class Shipment extends \Opencart\System\Engine\Controller {
 	private function jsonResponse(array $data): void {
@@ -22,6 +23,14 @@ class Shipment extends \Opencart\System\Engine\Controller {
 		$this->document->setTitle($this->language->get('heading_title'));
 
 		$ut = $this->session->data['user_token'];
+
+		// Opening the list retries waybills queued while the API was down (a few
+		// at a time, and not at all while the breaker says it still is) — on
+		// OpenCart builds without a working cron this is the retry.
+		\Opencart\System\Library\NovaPoshta\Guard::bind($this->db);
+		if (!\Opencart\System\Library\NovaPoshta\Guard::status()['down'] || \Opencart\System\Library\NovaPoshta\Guard::allow()) {
+			\Opencart\System\Library\NovaPoshta\Ttn::retryQueued($this->db, $this->config, 5);
+		}
 
 		$rows = $this->db->query("SELECT s.*, o.invoice_no FROM `" . DB_PREFIX . "np_shipment` s LEFT JOIN `" . DB_PREFIX . "order` o ON o.order_id = s.order_id ORDER BY s.shipment_id DESC LIMIT 200")->rows;
 
@@ -83,7 +92,7 @@ class Shipment extends \Opencart\System\Engine\Controller {
 			if ($key === '' || $senderWh === '') {
 				$json['error'] = 'API key or sender warehouse not configured';
 			} else {
-				$client = new \Opencart\System\Library\NovaPoshta\Client($key);
+				$client = new \Opencart\System\Library\NovaPoshta\Client($key, $this->db);
 				$check = $client->checkReturnPossible((string)$row['int_doc_number']);
 				if (empty($check['success'])) {
 					$json['error'] = 'Return not possible: ' . (is_array(isset($check['errors']) ? $check['errors'] : null) ? implode('; ', $check['errors']) : 'unknown');
@@ -116,7 +125,7 @@ class Shipment extends \Opencart\System\Engine\Controller {
 		if ($key === '') {
 			$json['error'] = 'API key not configured';
 		} else {
-			$client = new \Opencart\System\Library\NovaPoshta\Client($key);
+			$client = new \Opencart\System\Library\NovaPoshta\Client($key, $this->db, 15);
 			$updated = 0;
 			$dateFrom = date('d.m.Y', strtotime('-90 days'));
 			$dateTo   = date('d.m.Y');

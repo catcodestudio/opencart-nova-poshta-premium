@@ -3,9 +3,13 @@ namespace Opencart\Catalog\Model\Extension\NovaPoshtaPremium\Shipping;
 
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/client.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/crypto.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/cache.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/selection.php';
 
 class NovaPoshta extends \Opencart\System\Engine\Model {
+	/** Live tariffs already asked in this request (the checkout quotes the same route twice). */
+	private static array $quoted = [];
+
 	public function getQuote(array $address): array {
 		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');
 
@@ -34,13 +38,27 @@ class NovaPoshta extends \Opencart\System\Engine\Model {
 		// the merchant's flat cost is never silently replaced by a carrier tariff.
 		$liveRate     = (int)$this->config->get('shipping_nova_poshta_live_rate');
 
-		if ($liveRate && $key !== '' && $senderCity !== '' && $recipientCity !== '') {
+		if ($liveRate && $key !== '' && $senderCity !== '' && \Opencart\System\Library\NovaPoshta\Cache::isRef($recipientCity)) {
 			$weight = $this->cartWeightKg();
 			$value  = $this->cartValue();
-			$client = new \Opencart\System\Library\NovaPoshta\Client($key);
-			$response = $client->quote($senderCity, $recipientCity, $weight, $value, 'WarehouseWarehouse');
-			if (!empty($response['success']) && !empty($response['data'][0]['Cost'])) {
-				$cost = (float)$response['data'][0]['Cost'];
+			$memo   = $senderCity . '|' . $recipientCity . '|' . $weight . '|' . $value;
+			if (!array_key_exists($memo, self::$quoted)) {
+				$live   = null;
+				$client = new \Opencart\System\Library\NovaPoshta\Client($key, $this->db);
+				$response = $client->quote($senderCity, $recipientCity, $weight, $value, 'WarehouseWarehouse');
+				if (!empty($response['success']) && !empty($response['data'][0]['Cost'])) {
+					$live = (float)$response['data'][0]['Cost'];
+					\Opencart\System\Library\NovaPoshta\Cache::rememberRate($this->db, $senderCity, $recipientCity, $weight, $live);
+				} else {
+					// No answer from Nova Poshta (down, paused by the breaker, or an
+					// error): the last tariff it quoted for this route and weight,
+					// else the flat price below. The order goes through either way.
+					$live = \Opencart\System\Library\NovaPoshta\Cache::lastRate($this->db, $senderCity, $recipientCity, $weight);
+				}
+				self::$quoted[$memo] = $live;
+			}
+			if (self::$quoted[$memo] !== null) {
+				$cost = (float)self::$quoted[$memo];
 			}
 		}
 

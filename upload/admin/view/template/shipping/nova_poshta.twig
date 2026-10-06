@@ -23,6 +23,18 @@
       <button type="button" class="btn-close" id="np-notice-close" data-url="{{ url_dismiss_notice }}" aria-label="Close"></button>
     </div>
     {% endif %}
+    {% if np_api_down %}
+    <div class="alert alert-warning d-flex align-items-start gap-3" id="np-api-down">
+      <i class="fa-solid fa-triangle-exclamation mt-1"></i>
+      <div>{{ np_api_down }}</div>
+    </div>
+    {% endif %}
+    {% if np_ttn_queued %}
+    <div class="alert alert-info d-flex align-items-start gap-3" id="np-ttn-queued">
+      <i class="fa-solid fa-clock-rotate-left mt-1"></i>
+      <div>{{ np_ttn_queued }} <a href="{{ shipments_url }}">{{ button_shipments }}</a></div>
+    </div>
+    {% endif %}
     <div class="card">
       <div class="card-header"><i class="fa-solid fa-pencil"></i> {{ text_edit }}</div>
       <div class="card-body">
@@ -326,10 +338,14 @@
   const hWhRef   = document.getElementById('input-sender-warehouse-ref');
   const hWhName  = document.getElementById('input-sender-warehouse-name');
 
+  // With the Nova Poshta API down a list comes back empty: keep showing what is
+  // saved instead of a bare «—» (the hidden fields keep the value either way).
+  const keepSaved = (sel, saved) => { if (sel.options.length <= 1 && saved) sel.innerHTML = saved; };
   const loadWh = (cityRef) => {
     if (!cityRef) return;
+    const saved = whSelect.innerHTML;
     whSelect.innerHTML = '<option value="">...</option>';
-    post(whSelect.dataset.url, {city_ref: cityRef}).then(d => {
+    post(whSelect.dataset.url, {city_ref: cityRef}).catch(() => ({})).then(d => {
       whSelect.innerHTML = '<option value="">—</option>';
       const want = whSelect.dataset.selectedRef || hWhRef.value;
       (d.warehouses || []).forEach(w => {
@@ -338,6 +354,7 @@
         if (w.ref === want) o.selected = true;
         whSelect.appendChild(o);
       });
+      keepSaved(whSelect, saved);
     });
   };
 
@@ -397,8 +414,9 @@
   const senderPhone = document.getElementById('input-sender-phone');
 
   const loadCps = () => {
+    const saved = cpSel.innerHTML;
     cpSel.innerHTML = '<option value="">...</option>';
-    post(cpSel.dataset.url).then(d => {
+    post(cpSel.dataset.url).catch(() => ({})).then(d => {
       cpSel.innerHTML = '<option value="">—</option>';
       const want = cpSel.dataset.selectedRef || cpRefHidden.value;
       (d.counterparties || []).forEach(c => {
@@ -407,12 +425,14 @@
         if (c.ref === want) o.selected = true;
         cpSel.appendChild(o);
       });
+      keepSaved(cpSel, saved);
       if (cpSel.value) loadContacts(cpSel.value);
     });
   };
   const loadContacts = (cpRef) => {
+    const saved = contactSel.innerHTML;
     contactSel.innerHTML = '<option value="">...</option>';
-    post(contactSel.dataset.url, {counterparty_ref: cpRef}).then(d => {
+    post(contactSel.dataset.url, {counterparty_ref: cpRef}).catch(() => ({})).then(d => {
       contactSel.innerHTML = '<option value="">—</option>';
       const want = contactSel.dataset.selectedRef || contactRefHidden.value;
       (d.contacts || []).forEach(c => {
@@ -421,6 +441,7 @@
         if (c.ref === want) o.selected = true;
         contactSel.appendChild(o);
       });
+      keepSaved(contactSel, saved);
       if (contactSel.value && contactSel.selectedOptions[0]?.dataset.phone) {
         if (!senderPhone.value) senderPhone.value = contactSel.selectedOptions[0].dataset.phone;
       }

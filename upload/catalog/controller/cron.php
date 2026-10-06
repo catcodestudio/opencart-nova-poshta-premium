@@ -5,9 +5,14 @@ require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/cli
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/crypto.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/cache.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/license.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/ttn.php';
 
 class Cron extends \Opencart\System\Engine\Controller {
 	public function pollStatus(): void {
+		// Waybills the API could not take while it was down (any edition: auto-TTN
+		// itself is not Pro). Stops at the first sign it is still down.
+		\Opencart\System\Library\NovaPoshta\Ttn::retryQueued($this->db, $this->config, 20);
+
 		// Pro feature: automated status polling. Free users see whatever
 		// status was last manually refreshed from the shipments admin page.
 		if (!\Opencart\System\Library\NovaPoshta\License::isPro($this->config)) {
@@ -21,7 +26,7 @@ class Cron extends \Opencart\System\Engine\Controller {
 		if (!$rows) {
 			return;
 		}
-		$client = new \Opencart\System\Library\NovaPoshta\Client($key);
+		$client = new \Opencart\System\Library\NovaPoshta\Client($key, $this->db, 15);
 		$byNumber = [];
 		foreach ($rows as $r) {
 			$byNumber[$r['int_doc_number']] = $r;
@@ -113,6 +118,9 @@ class Cron extends \Opencart\System\Engine\Controller {
 	public function syncCities(): void {
 		$key = \Opencart\System\Library\NovaPoshta\Crypto::decrypt((string)$this->config->get('shipping_nova_poshta_api_key'));
 		\Opencart\System\Library\NovaPoshta\Cache::syncCities($this->db, $key);
+		// Branch lists of the popular cities and of recent destinations, so the
+		// checkout has them when the API is down.
+		\Opencart\System\Library\NovaPoshta\Cache::warmWarehouses($this->db, $key, [(string)$this->config->get('shipping_nova_poshta_sender_city_ref')]);
 	}
 
 	public function syncCod(): void {
@@ -123,7 +131,7 @@ class Cron extends \Opencart\System\Engine\Controller {
 		}
 		$key = \Opencart\System\Library\NovaPoshta\Crypto::decrypt((string)$this->config->get('shipping_nova_poshta_api_key'));
 		if ($key === '') return;
-		$client = new \Opencart\System\Library\NovaPoshta\Client($key);
+		$client = new \Opencart\System\Library\NovaPoshta\Client($key, $this->db, 15);
 		$dateFrom = date('d.m.Y', strtotime('-90 days'));
 		$dateTo   = date('d.m.Y');
 		for ($page = 1; $page <= 10; $page++) {

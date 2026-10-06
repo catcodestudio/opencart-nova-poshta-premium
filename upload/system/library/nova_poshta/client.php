@@ -2,17 +2,57 @@
 namespace Opencart\System\Library\NovaPoshta;
 
 require_once __DIR__ . '/translit.php';
+require_once __DIR__ . '/guard.php';
 
 class Client {
 	private string $endpoint = 'https://api.novaposhta.ua/v2.0/json/';
 	private string $apiKey;
-	private int $timeout = 15;
+	// Seconds for the whole call / for the TCP+TLS handshake. Short on purpose:
+	// a request that waits for a dead API holds a PHP worker, and a shop has few.
+	private int $timeout;
+	private int $connectTimeout = 3;
+	private bool $bypassGuard = false;
 
-	public function __construct(string $apiKey) {
-		$this->apiKey = $apiKey;
+	/**
+	 * @param $db      the shop connection — binds the shared circuit breaker
+	 *                 (Guard). Null leaves the breaker out (CLI scripts).
+	 * @param $timeout seconds for one call; 6 for anything a buyer or the admin
+	 *                 waits on, more only for the paged directory downloads.
+	 */
+	public function __construct(string $apiKey, $db = null, int $timeout = 6) {
+		$this->apiKey  = $apiKey;
+		$this->timeout = max(2, $timeout);
+		if ($db !== null) {
+			Guard::bind($db);
+		}
+	}
+
+	/** The admin «Test connection» button asks the API even while the breaker is open. */
+	public function bypassGuard(): self {
+		$this->bypassGuard = true;
+		return $this;
+	}
+
+	/**
+	 * Whether a response means «the API is not there» (as opposed to «the API
+	 * said no»): the caller then falls back or queues instead of reporting an error.
+	 */
+	public static function isUnavailable(array $response): bool {
+		if (!empty($response['unavailable'])) {
+			return true;
+		}
+		if (!empty($response['success'])) {
+			return false;
+		}
+		$errors = is_array($response['errors'] ?? null) ? implode(' ', array_map('strval', $response['errors'])) : '';
+		return (bool)preg_match('/temporar|unavailable|time ?out|timed out|internal server|overload|недоступ|тимчасово|технічн/iu', $errors);
 	}
 
 	public function call(string $model, string $method, array $properties = []): array {
+		if (!$this->bypassGuard && !Guard::allow()) {
+			return ['success' => false, 'unavailable' => true, 'errors' => ['Nova Poshta API is not responding — paused, working from the saved data']];
+		}
+
 		$payload = [
 			'apiKey'           => $this->apiKey,
 			'modelName'        => $model,
@@ -27,22 +67,45 @@ class Client {
 			CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Accept: application/json'],
 			CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
 			CURLOPT_TIMEOUT        => $this->timeout,
-			CURLOPT_CONNECTTIMEOUT => 5,
+			CURLOPT_CONNECTTIMEOUT => $this->connectTimeout,
+			// Sub-second timeouts need this on some builds; harmless otherwise.
+			CURLOPT_NOSIGNAL       => true,
 		]);
 
 		$raw  = curl_exec($ch);
 		$err  = curl_error($ch);
-		$http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+		$http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
-		if ($raw === false) {
-			return ['success' => false, 'errors' => ['HTTP: ' . $err], 'http_code' => $http];
+		if ($raw === false || $http === 0) {
+			Guard::failure('HTTP: ' . $err);
+			return ['success' => false, 'unavailable' => true, 'errors' => ['HTTP: ' . $err], 'http_code' => $http];
 		}
 
-		$decoded = json_decode($raw, true);
+		$decoded = json_decode((string)$raw, true);
 		if (!is_array($decoded)) {
-			return ['success' => false, 'errors' => ['Invalid JSON response'], 'http_code' => $http, 'raw' => $raw];
+			if ($http >= 500 || $http === 429 || $http === 0) {
+				Guard::failure('HTTP ' . $http);
+			} else {
+				// A 200 maintenance page is an outage too.
+				Guard::failure('Invalid JSON (HTTP ' . $http . ')');
+			}
+			return ['success' => false, 'unavailable' => true, 'errors' => ['Invalid JSON response (HTTP ' . $http . ')'], 'http_code' => $http];
+		}
+		if ($http >= 500) {
+			Guard::failure('HTTP ' . $http);
+			$decoded['success'] = false;
+			$decoded['unavailable'] = true;
+			return $decoded;
 		}
 
+		// The API answered. Business errors («City not found») are not an outage;
+		// «service temporarily unavailable» spelled as success:false is.
+		if (empty($decoded['success']) && self::isUnavailable($decoded)) {
+			Guard::failure(implode('; ', array_map('strval', (array)($decoded['errors'] ?? []))));
+			$decoded['unavailable'] = true;
+			return $decoded;
+		}
+		Guard::success();
 		return $decoded;
 	}
 

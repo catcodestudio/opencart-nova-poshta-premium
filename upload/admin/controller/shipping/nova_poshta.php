@@ -5,6 +5,8 @@ require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/cli
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/crypto.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/cache.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/license.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/guard.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/ttn.php';
 
 class NovaPoshta extends \Opencart\System\Engine\Controller {
 	private function jsonResponse(array $data): void {
@@ -108,6 +110,19 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			PRIMARY KEY (`ref`),
 			KEY `city_ref` (`city_ref`),
 			KEY `updated_at` (`updated_at`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+		// Circuit-breaker state shared by all requests (see system/library/nova_poshta/guard.php).
+		\Opencart\System\Library\NovaPoshta\Guard::createTable($this->db);
+
+		// Last tariff the API quoted per route and weight — the price shown when it is down.
+		$this->db->query("CREATE TABLE IF NOT EXISTS `{$prefix}np_rate_cache` (
+			`sender_city_ref` varchar(64) NOT NULL,
+			`recipient_city_ref` varchar(64) NOT NULL,
+			`weight_kg` int NOT NULL,
+			`cost` decimal(15,2) NOT NULL,
+			`updated_at` datetime NOT NULL,
+			PRIMARY KEY (`sender_city_ref`, `recipient_city_ref`, `weight_kg`)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
 		$this->db->query("CREATE TABLE IF NOT EXISTS `{$prefix}np_api_log` (
@@ -315,6 +330,18 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		$data['url_dismiss_notice']  = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.dismissNotice', 'user_token=' . $this->session->data['user_token']);
 		$data['buy_url']         = 'https://catcode.com.ua/modules/opencart-nova-poshta-premium/';
 
+		// Nova Poshta API outage: say so plainly and say what the shop does meanwhile.
+		\Opencart\System\Library\NovaPoshta\Guard::bind($this->db);
+		$guard = \Opencart\System\Library\NovaPoshta\Guard::status();
+		$data['np_api_down'] = $guard['down'] ? sprintf(
+			$this->language->get('text_api_down'),
+			date('d.m H:i', $guard['since'] ?: time()),
+			$guard['last_error'],
+			date('H:i', max($guard['retry_at'], time()))
+		) : '';
+		$queued = \Opencart\System\Library\NovaPoshta\Ttn::queuedCount($this->db);
+		$data['np_ttn_queued'] = $queued > 0 ? sprintf($this->language->get('text_ttn_queued'), $queued) : '';
+
 		// The single nudge: shown once the module is actually carrying orders
 		// (switched on and an API key saved), never on a bare install, and
 		// never again once closed.
@@ -388,7 +415,9 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			if ($key === '') {
 				$json['error'] = $this->language->get('error_api_key_empty');
 			} else {
-				$client   = new \Opencart\System\Library\NovaPoshta\Client($key);
+				// The merchant's manual probe: asks the API even while the breaker
+				// is open, and a success closes it.
+				$client   = (new \Opencart\System\Library\NovaPoshta\Client($key, $this->db))->bypassGuard();
 				$response = $client->testConnection();
 				if (!empty($response['success'])) {
 					$count = is_array($response['data']) ? count($response['data']) : 0;
@@ -452,7 +481,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			} elseif ($senderRef === '') {
 				$json['error'] = $this->language->get('error_sender_city_empty');
 			} else {
-				$client   = new \Opencart\System\Library\NovaPoshta\Client($key);
+				$client   = new \Opencart\System\Library\NovaPoshta\Client($key, $this->db);
 				$response = $client->call('InternetDocument', 'getDocumentPrice', [
 					'CitySender'    => $senderRef,
 					'CityRecipient' => $kyivRef,
@@ -483,7 +512,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			if ($key === '') {
 				$json['error'] = $this->language->get('error_api_key_empty');
 			} else {
-				$client = new \Opencart\System\Library\NovaPoshta\Client($key);
+				$client = new \Opencart\System\Library\NovaPoshta\Client($key, $this->db);
 				$resp = $client->getSenderCounterparties();
 				if (!empty($resp['success']) && is_array($resp['data'] ?? null)) {
 					foreach ($resp['data'] as $row) {
@@ -512,7 +541,7 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			if ($key === '' || $cpRef === '') {
 				$json['error'] = $this->language->get('error_api_key_empty');
 			} else {
-				$client = new \Opencart\System\Library\NovaPoshta\Client($key);
+				$client = new \Opencart\System\Library\NovaPoshta\Client($key, $this->db);
 				$resp = $client->getContactPersons($cpRef);
 				if (!empty($resp['success']) && is_array($resp['data'] ?? null)) {
 					foreach ($resp['data'] as $row) {

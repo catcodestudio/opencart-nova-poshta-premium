@@ -7,6 +7,7 @@ require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/lic
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/cache.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/zones.php';
 require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/selection.php';
+require_once DIR_EXTENSION . 'nova_poshta_premium/system/library/nova_poshta/ttn.php';
 
 class Events extends \Opencart\System\Engine\Controller {
 	/** UTF-8 safe truncate that survives hosts without mbstring. */
@@ -261,7 +262,10 @@ class Events extends \Opencart\System\Engine\Controller {
 
 	/**
 	 * On order status change — if status matches the configured auto-TTN trigger,
-	 * attempt to create a TTN via NP API.
+	 * create the TTN. For cash on delivery this runs inside the buyer's own
+	 * «Confirm order» request, so it must never wait on a dead API: Client gives
+	 * up after a few seconds (or at once while the breaker is open) and the
+	 * shipment goes to the retry queue instead of failing the waybill for good.
 	 */
 	public function orderHistoryAdded(string &$route, array &$args, mixed &$output): void {
 		$order_id  = (int)($args[0] ?? 0);
@@ -270,77 +274,24 @@ class Events extends \Opencart\System\Engine\Controller {
 		if ($order_id <= 0 || $trigger <= 0 || $order_status_id !== $trigger) {
 			return;
 		}
+		// Both triggers (4.1 dot / 4.0.2 slash) are registered, and on 4.0.2.x the
+		// wildcard one matches too: one status change, two calls. Measured on
+		// 4.0.2.3 with the API hanging — the buyer waited for two TTN attempts.
+		static $done = [];
+		if (isset($done[$order_id . ':' . $order_status_id])) {
+			return;
+		}
+		$done[$order_id . ':' . $order_status_id] = true;
 		$row = $this->db->query("SELECT * FROM `" . DB_PREFIX . "np_shipment` WHERE order_id = " . $order_id . " AND (int_doc_number IS NULL OR int_doc_number = '') LIMIT 1")->row;
 		if (!$row) {
 			return;
 		}
-		$key = \Opencart\System\Library\NovaPoshta\Crypto::decrypt((string)$this->config->get('shipping_nova_poshta_api_key'));
-		if ($key === '') {
-			return;
-		}
-		$senderRef       = (string)$this->config->get('shipping_nova_poshta_sender_counterparty_ref');
-		$senderContact   = (string)$this->config->get('shipping_nova_poshta_sender_contact_ref');
-		$senderPhone     = (string)$this->config->get('shipping_nova_poshta_sender_phone');
-		$senderCityRef   = (string)$this->config->get('shipping_nova_poshta_sender_city_ref');
-		$senderWhRef     = (string)$this->config->get('shipping_nova_poshta_sender_warehouse_ref');
-		if ($senderRef === '' || $senderContact === '' || $senderPhone === '' || $senderCityRef === '' || $senderWhRef === '') {
-			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET status_text = 'Не налаштовано відправника', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
-			return;
-		}
-
-		// Fetch order details for recipient name/phone + weight/value.
-		$this->load->model('checkout/order');
-		$order = $this->model_checkout_order->getOrder($order_id);
-		if (!$order) {
-			return;
-		}
-		$products = $this->db->query("SELECT op.name, op.quantity, op.price, COALESCE(p.weight, 0) AS weight FROM `" . DB_PREFIX . "order_product` op LEFT JOIN `" . DB_PREFIX . "product` p ON p.product_id = op.product_id WHERE op.order_id = " . $order_id)->rows;
-		$weight = 0.0;
-		$cost   = 0.0;
-		$descParts = [];
-		foreach ($products as $p) {
-			$weight += (float)$p['weight'] * (int)$p['quantity'];
-			$cost   += (float)$p['price']  * (int)$p['quantity'];
-			$descParts[] = trim((string)$p['name']);
-		}
-		if ($weight <= 0) $weight = 0.5;
-		if ($cost   <= 0) $cost   = (float)($order['total'] ?? 100);
-
-		// COD attachment is a Pro feature — without a valid license we still
-		// mint the TTN (core value), we just don't request cash-on-delivery
-		// from Nova Poshta. Merchant can convert manually in NP cabinet if
-		// they prefer that workflow without a license.
-		$isPro = \Opencart\System\Library\NovaPoshta\License::isPro($this->config);
-		$codAmount = ($isPro && (string)($order['payment_code'] ?? '') === 'cod') ? $cost : 0.0;
-		$client = new \Opencart\System\Library\NovaPoshta\Client($key);
-		$resp = $client->createTTN([
-			'sender_ref'             => $senderRef,
-			'sender_contact_ref'     => $senderContact,
-			'sender_phone'           => $senderPhone,
-			'sender_city_ref'        => $senderCityRef,
-			'sender_warehouse_ref'   => $senderWhRef,
-			'recipient_city_ref'     => (string)$row['recipient_city_ref'],
-			'recipient_warehouse_ref'=> (string)$row['recipient_warehouse_ref'],
-			'recipient_name'         => trim(($order['shipping_firstname'] ?? '') . ' ' . ($order['shipping_lastname'] ?? '')) ?: ($order['firstname'] . ' ' . $order['lastname']),
-			'recipient_phone'        => (string)($order['telephone'] ?? ''),
-			'weight'                 => $weight,
-			'cost'                   => $cost,
-			'cod_amount'             => $codAmount,
-			'description'            => self::cut(implode(', ', $descParts) ?: 'Order #' . $order_id, 200),
-			'service_type'           => 'WarehouseWarehouse',
-			'payer_type'             => 'Recipient',
-			'payment_method'         => 'Cash',
-			'cargo_type'             => 'Cargo',
-			'seats_amount'           => 1,
-		]);
-
-		if (!empty($resp['success']) && !empty($resp['data'][0]['IntDocNumber'])) {
-			$intDoc = (string)$resp['data'][0]['IntDocNumber'];
-			$intRef = (string)($resp['data'][0]['Ref'] ?? '');
-			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET int_doc_number = '" . $this->db->escape($intDoc) . "', int_doc_ref = '" . $this->db->escape($intRef) . "', status_code = 1, status_text = 'Створено', weight = " . (float)$weight . ", declared_cost = " . (float)$cost . ", cod_amount = " . (float)$codAmount . ", recipient_phone = '" . $this->db->escape((string)$order['telephone']) . "', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
-		} else {
-			$err = is_array($resp['errors'] ?? null) ? implode('; ', $resp['errors']) : 'unknown error';
-			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET status_text = '" . $this->db->escape(self::cut('Помилка ТТН: ' . $err, 250)) . "', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
+		try {
+			\Opencart\System\Library\NovaPoshta\Ttn::create($this->db, $this->config, $row, true);
+		} catch (\Throwable $e) {
+			// The order is placed; a waybill problem must not turn the buyer's
+			// confirmation into an error page.
+			$this->db->query("UPDATE `" . DB_PREFIX . "np_shipment` SET status_text = '" . $this->db->escape(self::cut('Помилка ТТН: ' . $e->getMessage(), 250)) . "', last_polled_at = NOW() WHERE shipment_id = " . (int)$row['shipment_id']);
 		}
 	}
 }

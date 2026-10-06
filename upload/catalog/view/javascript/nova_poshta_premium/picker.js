@@ -94,10 +94,22 @@
   const el = (html) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstElementChild; };
   const debounce = (fn, ms) => { let h; return (...a) => { clearTimeout(h); h = setTimeout(() => fn(...a), ms); }; };
 
+  // The shop answers within a few seconds even with the Nova Poshta API down
+  // (short timeouts + circuit breaker on the server). If it still does not —
+  // e.g. an overloaded host — give up after 12 s: every caller already falls
+  // back to typing the city / branch by hand.
+  const API_TIMEOUT_MS = 12000;
   const api = (url, body) => {
     const opts = { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' }, credentials: 'same-origin' };
     if (body) opts.body = new URLSearchParams(body);
-    return fetch(url, opts).then((r) => r.json());
+    let timer = 0;
+    if (typeof AbortController !== 'undefined') {
+      const ac = new AbortController();
+      opts.signal = ac.signal;
+      timer = setTimeout(() => ac.abort(), API_TIMEOUT_MS);
+    }
+    const done = () => { if (timer) clearTimeout(timer); };
+    return fetch(url, opts).then((r) => r.json()).then((d) => { done(); return d; }, (e) => { done(); throw e; });
   };
 
   const wrap = el(`
