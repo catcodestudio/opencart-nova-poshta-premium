@@ -1,7 +1,7 @@
 <?php
 $_['heading_title']     = 'Nova Poshta Shipments';
 $_['text_home']         = 'Home';
-$_['text_list']         = 'Shipments (last 200)';
+$_['text_list']         = 'Shipments';
 $_['text_empty']        = 'No shipments yet. They appear after customers place orders using Nova Poshta.';
 $_['column_order']      = 'Order';
 $_['column_recipient']  = 'Recipient';
@@ -19,3 +19,12 @@ $_['text_failed']          = 'Operation failed';
 $_['text_pro_badge']             = 'Pro';
 $_['text_pro_benefit_shipments'] = 'Pro: return waybills in one click and cash-on-delivery payout reconciliation against Nova Poshta. Creating waybills and this list work without a licence.';
 $_['button_try_pro']             = 'Try Pro free';
+$_['column_destination'] = 'City and branch';
+$_['column_action']      = 'Actions';
+$_['entry_search']       = 'Search';
+$_['text_search_ph']     = 'Order number, waybill, name or phone';
+$_['text_all_statuses']  = 'All statuses';
+$_['button_filter']      = 'Search';
+$_['button_reset']       = 'Reset';
+$_['text_no_results']    = 'Nothing matches this search.';
+$_['text_results']       = 'Showing %d–%d of %d';

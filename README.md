@@ -23,7 +23,7 @@ Nova Poshta shipping integration for OpenCart 4.x merchants. Free download with 
 
 ## Pro features (require valid license)
 
-License key purchased separately from https://catcode.com.ua/modules/opencart-nova-poshta-premium/ — **₴2 990 per year**, or a longer term at a discount (2–5 years, up to −25% per year). Updates and support are included for the whole term; when it ends the premium features lock and the free tier keeps working.
+License key purchased separately from https://catcode.com.ua/modules/opencart-nova-poshta-premium/ — **₴2 490, one-time purchase, perpetual licence** (no yearly fees).
 
 - **COD reconciliation** — auto-attach `BackwardDelivery` on cash-on-delivery orders; daily payout sync against NP `getDocumentList` (BackwardDeliverySum + MoneyTransferNumber tracked per shipment)
 - **Status polling cron** (hourly) — batch `TrackingDocument.getStatusDocuments` keeps shipment dashboard live
@@ -40,7 +40,7 @@ License key purchased separately from https://catcode.com.ua/modules/opencart-no
 
 ## License
 
-Proprietary. **₴2 990 per year**, term chosen at checkout (1–5 years, longer terms discounted). No auto-renewal — renewals are always manual. Sold per-domain via catcode.com.ua.
+Proprietary. **₴2 490, one-time purchase, perpetual licence** — no subscription or renewals. Sold per-domain via catcode.com.ua.
 
 ## Install (dev)
 
@@ -81,6 +81,17 @@ build.ps1                # Compress-Archive helper
 
 ## Changelog
 
+
+### 1.2.29
+
+- Блок «Доставка Новою Поштою» на оформленні замовлення: у заголовку знак Нової Пошти (SVG із novaposhta.ua вбудовано в модуль, без зовнішніх запитів) замість іконки-вантажівки.
+- На телефоні (до 575 px) у полях «Місто» і «Відділення або поштомат» прибрано декоративні іконки праворуч — довга назва відділення більше не обрізається через них. На ПК іконки лишились.
+- Прибрано рожеву плашку «✓ Місто — Відділення» під полями: обране місто й відділення і так видно в полях. Відділення, як і раніше, зберігається в замовленні.
+- Поле «Відділення»: клік або фокус на заповненому полі показує всі відділення міста, обране підсвічене й прокручене в зону видимості, а не лише один збіг з поточним текстом; фільтр вмикається, коли покупець починає вводити (текст обраного відділення виділяється й замінюється введеним). Закриття списку після вибору і кліку поза ним — без змін.
+- Налаштування, «Ліцензія Преміум»: формулювання виправлено на безстрокову ліцензію (разова покупка) — для OpenCart ліцензія назавжди.
+- Налаштування: на безкоштовній версії без ключа — лише «Безкоштовна версія». Якщо ключ збережено, поруч видно, який саме (перші й останні 4 символи), що з ним (сервер не прийняв / ще не перевірявся), і кнопку, щоб його прибрати.
+- «Відправлення Нової Пошти»: сторінки по 25 замість «останніх 200» однією таблицею; пошук за номером замовлення, ТТН, ПІБ або телефоном і фільтр за статусом; статус — назвою без технічного коду (помилка ТТН і черга — окремою назвою з причиною під нею); «Отримувач» — ПІБ і телефон, місто й відділення — окремою колонкою; колонка з кнопкою зворотної ТТН має заголовок «Дії» і з'являється лише коли є що робити.
+- Налаштування: якщо в магазині поле «Телефон» на оформленні приховане або необов'язкове (OpenCart 4.0.2+, Налаштування → Опції), модуль попереджає, що телефон отримувача потрібен для ТТН, і дає посилання на налаштування.
 
 ### 1.2.28
 

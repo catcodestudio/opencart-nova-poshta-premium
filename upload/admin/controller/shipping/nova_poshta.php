@@ -325,6 +325,10 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		$data['trial_days_left'] = $license::trialDaysLeft($this->config);
 		$data['license_expires'] = $license::expiresAt($this->config);
 		$data['license_verdict'] = (string)$this->config->get('shipping_nova_poshta_license_status');
+		// A stored key is otherwise invisible on the page (it lives in the modal), so
+		// a rejection read like «no key, yet the server refused it». Name the key.
+		$storedKey = trim((string)$this->config->get('shipping_nova_poshta_license_key'));
+		$data['license_key_masked'] = $storedKey === '' ? '' : (strlen($storedKey) > 9 ? substr($storedKey, 0, 4) . '…' . substr($storedKey, -4) : $storedKey);
 		$data['url_license_trial']      = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.licenseTrial', 'user_token=' . $this->session->data['user_token']);
 		$data['url_license_deactivate'] = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.licenseDeactivate', 'user_token=' . $this->session->data['user_token']);
 		$data['url_dismiss_notice']  = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.dismissNotice', 'user_token=' . $this->session->data['user_token']);
@@ -339,6 +343,13 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 			$guard['last_error'],
 			date('H:i', max($guard['retry_at'], time()))
 		) : '';
+		// The waybill needs the recipient's phone. OpenCart 4.0.2+ can hide the
+		// field from the checkout (Settings → Option); say so instead of letting
+		// every waybill fail on an empty phone.
+		$data['np_phone_hint'] = '';
+		if ($this->config->has('config_telephone_display') && (!$this->config->get('config_telephone_display') || !$this->config->get('config_telephone_required'))) {
+			$data['np_phone_hint'] = sprintf($this->language->get('text_phone_hint'), $this->url->link('setting/setting', 'user_token=' . $this->session->data['user_token']));
+		}
 		$queued = \Opencart\System\Library\NovaPoshta\Ttn::queuedCount($this->db);
 		$data['np_ttn_queued'] = $queued > 0 ? sprintf($this->language->get('text_ttn_queued'), $queued) : '';
 

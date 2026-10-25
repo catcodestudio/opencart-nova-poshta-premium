@@ -24,7 +24,8 @@
   const STYLE = `
   .np-box{--np-accent:${accent};--np-radius:${radius}px;${surfaceVars}border:1px solid var(--np-line);border-radius:var(--np-radius);margin:0 0 20px;background:var(--np-surface);box-shadow:0 1px 2px rgba(0,0,0,.04);}
   .np-box__head{display:flex;align-items:center;gap:10px;font-weight:600;font-size:15px;padding:14px 18px;color:var(--np-text);background:color-mix(in srgb,var(--np-accent) 7%,transparent);border-bottom:1px solid var(--np-line);border-radius:var(--np-radius) var(--np-radius) 0 0;}
-  .np-box__logo{width:26px;height:26px;border-radius:calc(var(--np-radius) * .45);background:var(--np-accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;letter-spacing:-.5px;flex:none;}
+  .np-box__logo{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;flex:none;}
+  .np-box__logo svg{display:block;width:26px;height:26px;}
   .np-box__body{padding:16px 18px 16px;}
   .np-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
   @media(max-width:640px){.np-grid{grid-template-columns:1fr;}}
@@ -35,16 +36,16 @@
   .np-input:focus{outline:none;border-color:var(--np-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--np-accent) 20%,transparent);}
   .np-input:disabled{background:var(--np-soft);color:var(--np-muted);cursor:not-allowed;}
   .np-field__icon{position:absolute;right:13px;bottom:0;height:44px;display:flex;align-items:center;color:var(--np-muted);pointer-events:none;}
+  @media(max-width:575px){.np-field__icon{display:none;}.np-input{padding-right:13px;}}
   .np-menu{position:absolute;left:0;right:0;top:calc(100% + 5px);z-index:60;background:var(--np-surface);border:1px solid var(--np-line);border-radius:calc(var(--np-radius) * .8);box-shadow:0 10px 34px rgba(0,0,0,.16);max-height:264px;overflow-y:auto;display:none;}
   .np-menu.is-open{display:block;}
   .np-opt{padding:10px 13px;font-size:14px;cursor:pointer;border-bottom:1px solid var(--np-line);color:var(--np-text);}
   .np-opt:last-child{border-bottom:0;}
   .np-opt small{display:block;color:var(--np-muted);font-size:12px;margin-top:1px;}
   .np-opt:hover,.np-opt.is-active{background:color-mix(in srgb,var(--np-accent) 10%,transparent);}
+  .np-opt.is-current{font-weight:600;box-shadow:inset 3px 0 0 var(--np-accent);}
   .np-opt--muted{color:var(--np-muted);cursor:default;text-align:center;}
   .np-opt--head{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--np-muted);cursor:default;background:var(--np-soft);padding:7px 13px;}
-  .np-summary[hidden]{display:none!important;}
-  .np-summary{display:inline-flex;align-items:center;gap:8px;margin-top:14px;padding:9px 13px;font-size:13px;font-weight:600;color:var(--np-accent);background:color-mix(in srgb,var(--np-accent) 9%,transparent);border-radius:calc(var(--np-radius) * .65);}
   .np-spin{display:inline-block;width:15px;height:15px;border:2px solid color-mix(in srgb,var(--np-accent) 28%,transparent);border-top-color:var(--np-accent);border-radius:50%;animation:np-spin .6s linear infinite;vertical-align:middle;}
   @keyframes np-spin{to{transform:rotate(360deg)}}
   .np-native-hidden{display:none!important;}
@@ -53,10 +54,9 @@
   const SVG = (p, w) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w || 1.9}" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
   const ICON_PIN = SVG('<path d="M20 10c0 4.4-8 12-8 12s-8-7.6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>');
   const ICON_BOX = SVG('<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>');
-  const ICON_OK  = SVG('<polyline points="20 6 9 17 4 12"/>', 2.4);
-  // Header glyph — neutral delivery mark (NOT a reproduction of the Nova Poshta
-  // trademark logo). Merchants may swap in the official logo if they hold rights.
-  const ICON_TRUCK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h2"/><path d="M14 9h4l4 4v4a1 1 0 0 1-1 1h-2"/><circle cx="7.5" cy="18" r="2"/><circle cx="17.5" cy="18" r="2"/></svg>';
+  // Header mark — the Nova Poshta sign as published on novaposhta.ua
+  // (/_np-app-static/favicon.svg), inlined: the checkout makes no outside request.
+  const ICON_NP = '<svg width="26" height="26" viewBox="1.2 1.4 45.7 46.2" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Нова Пошта"><path fill="#DA291C" d="M28.0711 38.7957V29.2681H20.0583V38.7957H13.9472L21.3858 46.3158C21.7409 46.6754 22.1626 46.9606 22.6269 47.1552C23.0911 47.3499 23.5887 47.4501 24.0913 47.4501C24.5939 47.4501 25.0915 47.3499 25.5557 47.1552C26.02 46.9606 26.4417 46.6754 26.7968 46.3158L34.2354 38.7957H28.0711ZM9.92264 34.7383V14.242L2.48403 21.7621C2.12769 22.1207 1.84494 22.5469 1.652 23.0163C1.45906 23.4856 1.35974 23.9889 1.35974 24.4972C1.35974 25.0055 1.45906 25.5088 1.652 25.9782C1.84494 26.4475 2.12769 26.8737 2.48403 27.2323L9.92264 34.7383ZM20.0583 10.1988V19.7263H28.0711V10.1988H34.1934L26.7548 2.68429C26.3997 2.32473 25.978 2.03948 25.5137 1.84485C25.0495 1.65022 24.5519 1.55005 24.0493 1.55005C23.5467 1.55005 23.0491 1.65022 22.5849 1.84485C22.1206 2.03948 21.6989 2.32473 21.3438 2.68429L13.9052 10.2044L20.0583 10.1988ZM45.6314 21.7621L38.1927 14.242V34.7383L45.6314 27.2323C45.987 26.8734 46.2692 26.447 46.4617 25.9777C46.6542 25.5084 46.7533 25.0053 46.7533 24.4972C46.7533 23.9891 46.6542 23.4861 46.4617 23.0167C46.2692 22.5474 45.987 22.1211 45.6314 21.7621Z"/></svg>';
 
   const t = {
     title: 'Доставка Новою Поштою',
@@ -114,7 +114,7 @@
 
   const wrap = el(`
     <div class="np-box">
-      <div class="np-box__head"><span class="np-box__logo">${ICON_TRUCK}</span><span>${t.title}</span></div>
+      <div class="np-box__head"><span class="np-box__logo">${ICON_NP}</span><span>${t.title}</span></div>
       <div class="np-box__body">
         <div class="np-grid">
           <div class="np-field" data-np="city">
@@ -131,7 +131,6 @@
             <input type="hidden" id="np-warehouse">
           </div>
         </div>
-        <div class="np-summary" id="np-summary" hidden></div>
       </div>
     </div>`);
 
@@ -403,22 +402,14 @@
   const whInput = () => wrap.querySelector('#np-wh-q');
   const whMenu = () => wrap.querySelector('#np-wh-results');
   const whHidden = () => wrap.querySelector('#np-warehouse');
-  const summary = () => wrap.querySelector('#np-summary');
 
   const openMenu = (m) => m.classList.add('is-open');
   const closeMenu = (m) => m.classList.remove('is-open');
   const muted = (text) => `<div class="np-opt np-opt--muted">${text}</div>`;
 
-  const renderSummary = () => {
-    const s = summary();
-    const whName = whHidden().dataset.name || '';
-    if (cityName && whName) {
-      s.innerHTML = `${ICON_OK}<span>${cityName} — ${whName}</span>`;
-      s.hidden = false;
-    } else {
-      s.hidden = true;
-    }
-  };
+  // The picked city and branch stay visible in the two inputs — no extra
+  // confirmation strip under them (it only repeated the same text).
+  const renderSummary = () => {};
 
   const cityOptsHtml = (list) => list.map((c) =>
     `<div class="np-opt" role="option" data-ref="${c.ref}" data-name="${c.name.replace(/"/g, '&quot;')}" data-area="${(c.area || '').replace(/"/g, '&quot;')}">${c.name}${c.area ? `<small>${c.area} область</small>` : ''}</div>`
@@ -473,16 +464,20 @@
       // The list can arrive after the customer already started typing — on One
       // Page Checkout it waits its turn behind the contacts save. The open menu
       // was drawn from an empty list (only «Використати: …»), so draw it again.
-      if (document.activeElement === w) renderWh(w.value);
+      if (document.activeElement === w) renderWh(whFiltering ? w.value : '');
     }).catch(() => { warehouses = []; w.placeholder = 'Введіть номер або назву відділення…'; });
   };
 
   // --- warehouse combobox (client-side filter over loaded list) ---
+  // Focus on the field shows the whole branch list of the city with the picked
+  // branch highlighted; the list narrows only once the customer types.
+  let whFiltering = false;
   const renderWh = (filter) => {
     const menu = whMenu();
     const f = (filter || '').trim();
     const fl = f.toLowerCase();
     const list = fl ? warehouses.filter((w) => w.description.toLowerCase().includes(fl)) : warehouses;
+    const cur = whHidden().value;
     if (!warehouses.length) {
       // Manual entry path when there is no live branch list.
       menu.innerHTML = f.length >= 1
@@ -492,10 +487,12 @@
       return;
     }
     if (!list.length) { menu.innerHTML = muted(t.noWh); openMenu(menu); return; }
-    menu.innerHTML = list.slice(0, 60).map((w) =>
-      `<div class="np-opt" role="option" data-ref="${w.ref}" data-name="${w.description.replace(/"/g, '&quot;')}">${w.description}</div>`
+    menu.innerHTML = (fl ? list.slice(0, 60) : list).map((w) =>
+      `<div class="np-opt${w.ref === cur ? ' is-active is-current' : ''}" role="option"${w.ref === cur ? ' aria-selected="true"' : ''} data-ref="${w.ref}" data-name="${w.description.replace(/"/g, '&quot;')}">${w.description}</div>`
     ).join('');
     openMenu(menu);
+    const on = menu.querySelector('.np-opt.is-current');
+    if (on) menu.scrollTop = Math.max(0, on.offsetTop - (menu.clientHeight - on.offsetHeight) / 2);
   };
 
   // setSelection requests in flight. While one is pending the session does not
@@ -652,8 +649,17 @@
     });
     ci.addEventListener('keydown', (e) => keyNav(cm, e));
 
-    wi.addEventListener('focus', () => { if (!wi.disabled) renderWh(wi.value); });
-    wi.addEventListener('input', () => renderWh(wi.value));
+    const openAllWh = () => {
+      if (wi.disabled) return;
+      whFiltering = false;
+      renderWh('');
+      // A picked branch is selected as a whole, so typing replaces it.
+      if (whHidden().value && wi.value) { try { wi.select(); } catch (e) { /* not selectable */ } }
+    };
+    wi.addEventListener('focus', openAllWh);
+    // Still focused after a keyboard pick: a click reopens the full list too.
+    wi.addEventListener('click', () => { if (!wm.classList.contains('is-open')) openAllWh(); });
+    wi.addEventListener('input', () => { whFiltering = true; renderWh(wi.value); });
     wm.addEventListener('click', (e) => {
       const o = e.target.closest('.np-opt[data-ref]'); if (!o) return;
       pickWh(o.dataset.ref, o.dataset.name);
@@ -673,7 +679,7 @@
       const w = whInput(); w.disabled = false; w.placeholder = t.whReady;
       api(cfg.getWarehouses, { city_ref: cityRef }).then((r) => {
         warehouses = (r && r.warehouses) || [];
-        if (document.activeElement === w) renderWh(w.value);
+        if (document.activeElement === w) renderWh(whFiltering ? w.value : '');
       });
       if (d.warehouse_ref) {
         whHidden().value = d.warehouse_ref;

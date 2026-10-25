@@ -25,37 +25,64 @@
     <div class="card">
       <div class="card-header"><i class="fa-solid fa-truck"></i> {{ text_list }} <span id="sync-result" class="ms-3 small"></span></div>
       <div class="card-body">
-        <table class="table table-bordered table-hover">
+        <form method="get" action="index.php" class="row g-2 align-items-end mb-3" id="form-np-filter">
+          <input type="hidden" name="route" value="extension/nova_poshta_premium/shipment.list"/>
+          <input type="hidden" name="user_token" value="{{ user_token }}"/>
+          <div class="col-12 col-md-6 col-lg-5">
+            <label for="input-np-q" class="form-label small text-muted mb-1">{{ entry_search }}</label>
+            <input type="search" name="filter_q" value="{{ filter_q|e }}" id="input-np-q" class="form-control" placeholder="{{ text_search_ph }}"/>
+          </div>
+          <div class="col-8 col-md-3 col-lg-3">
+            <label for="input-np-status" class="form-label small text-muted mb-1">{{ column_status }}</label>
+            <select name="filter_status" id="input-np-status" class="form-select">
+              <option value="">{{ text_all_statuses }}</option>
+              {% for st in statuses %}
+                <option value="{{ st|e }}"{% if st == filter_status %} selected{% endif %}>{{ st|e }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-4 col-md-3 col-lg-4 d-flex gap-2">
+            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-magnifying-glass"></i> {{ button_filter }}</button>
+            {% if filter_q or filter_status %}<a href="{{ reset_url }}" class="btn btn-light">{{ button_reset }}</a>{% endif %}
+          </div>
+        </form>
+        <div style="overflow-x:auto">
+        <table class="table table-bordered table-hover align-middle">
           <thead>
             <tr>
-              <th>#</th>
               <th>{{ column_order }}</th>
               <th>{{ column_recipient }}</th>
+              <th>{{ column_destination }}</th>
               <th>{{ column_ttn }}</th>
               <th>{{ column_status }}</th>
               <th>{{ column_cod }}</th>
-              <th>{{ column_return }}</th>
               <th>{{ column_created }}</th>
-              <th></th>
+              {% if has_actions %}<th class="text-end">{{ column_action }}</th>{% endif %}
             </tr>
           </thead>
           <tbody>
             {% for s in shipments %}
               <tr data-shipment-id="{{ s.shipment_id }}">
-                <td>{{ s.shipment_id }}</td>
                 <td><a href="{{ s.order_url }}">#{{ s.order_id }}</a></td>
-                <td>{{ s.recipient }}</td>
+                <td style="min-width:150px">
+                  {% if s.recipient %}<div>{{ s.recipient|e }}</div>{% endif %}
+                  {% if s.phone %}<div class="small text-muted text-nowrap">{{ s.phone|e }}</div>{% endif %}
+                  {% if not s.recipient and not s.phone %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td class="small" style="min-width:200px">{{ s.destination ? s.destination|e : '—' }}</td>
                 <td>
                   {% if s.int_doc_number %}
-                    <a href="{{ s.tracking_url }}" target="_blank">{{ s.int_doc_number }}</a>
+                    <a href="{{ s.tracking_url }}" target="_blank" rel="noopener">{{ s.int_doc_number }}</a>
                   {% else %}
                     <span class="text-muted">—</span>
                   {% endif %}
+                  {% if s.return_ttn %}
+                    <div class="small text-nowrap mt-1">{{ column_return }}: <a href="https://novaposhta.ua/tracking/?cargo_number={{ s.return_ttn }}" target="_blank" rel="noopener">{{ s.return_ttn }}</a></div>
+                  {% endif %}
                 </td>
-                <td>
-                  <span class="badge {% if s.status_code == 9 %}bg-success{% elseif s.status_code > 0 %}bg-info{% elseif s.status_code < 0 %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
-                    {{ s.status_code }} · {{ s.status_text }}
-                  </span>
+                <td style="min-width:150px;max-width:260px">
+                  <span class="badge {{ s.status_class }}" style="white-space:normal;text-align:left">{{ s.status_label|e }}</span>
+                  {% if s.status_detail %}<div class="small text-muted mt-1">{{ s.status_detail|e }}</div>{% endif %}
                 </td>
                 <td>
                   {% if s.cod_amount > 0 %}
@@ -69,25 +96,25 @@
                     <span class="text-muted">—</span>
                   {% endif %}
                 </td>
-                <td>
-                  {% if s.return_ttn %}
-                    <a href="https://novaposhta.ua/tracking/?cargo_number={{ s.return_ttn }}" target="_blank">{{ s.return_ttn }}</a>
-                  {% else %}
-                    <span class="text-muted">—</span>
-                  {% endif %}
-                </td>
-                <td>{{ s.created_at }}</td>
-                <td>
-                  {% if s.int_doc_number and not s.return_ttn %}
+                <td class="small">{{ s.created_at ? s.created_at|date('d.m.Y') : '' }}<br/><span class="text-muted">{{ s.created_at ? s.created_at|date('H:i') : '' }}</span></td>
+                {% if has_actions %}
+                <td class="text-end">
+                  {% if s.can_return %}
                     <button type="button" class="btn btn-sm btn-outline-warning button-return" data-url="{{ s.return_url }}" title="{{ button_return }}{% if not is_pro %} — {{ text_pro_badge }}{% endif %}"{% if not is_pro %} disabled{% endif %}><i class="fa-solid fa-rotate-left"></i></button>
                   {% endif %}
                 </td>
+                {% endif %}
               </tr>
             {% else %}
-              <tr><td colspan="9" class="text-center text-muted">{{ text_empty }}</td></tr>
+              <tr><td colspan="{{ has_actions ? 8 : 7 }}" class="text-center text-muted">{{ (filter_q or filter_status) ? text_no_results : text_empty }}</td></tr>
             {% endfor %}
           </tbody>
         </table>
+        </div>
+        <div class="row">
+          <div class="col-sm-6 text-start">{{ pagination }}</div>
+          <div class="col-sm-6 text-end">{{ results }}</div>
+        </div>
       </div>
     </div>
   </div>

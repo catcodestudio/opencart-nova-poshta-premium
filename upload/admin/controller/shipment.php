@@ -32,26 +32,109 @@ class Shipment extends \Opencart\System\Engine\Controller {
 			\Opencart\System\Library\NovaPoshta\Ttn::retryQueued($this->db, $this->config, 5);
 		}
 
-		$rows = $this->db->query("SELECT s.*, o.invoice_no FROM `" . DB_PREFIX . "np_shipment` s LEFT JOIN `" . DB_PREFIX . "order` o ON o.order_id = s.order_id ORDER BY s.shipment_id DESC LIMIT 200")->rows;
+		// --- filters, search and pages ------------------------------------------
+		// Request values arrive HTML-escaped by the core; work with the plain text.
+		$filterQ      = trim(html_entity_decode((string)($this->request->get['filter_q'] ?? ''), ENT_QUOTES, 'UTF-8'));
+		$filterStatus = trim(html_entity_decode((string)($this->request->get['filter_status'] ?? ''), ENT_QUOTES, 'UTF-8'));
+		$page         = max(1, (int)($this->request->get['page'] ?? 1));
+		$limit        = 25;
+
+		// The status the merchant reads: waybill errors and the retry queue carry
+		// details in status_text, so they are grouped under one name for the filter.
+		$label = "CASE WHEN s.status_code = " . \Opencart\System\Library\NovaPoshta\Ttn::QUEUED . " THEN 'У черзі на ТТН'"
+			. " WHEN s.status_text LIKE 'Помилка ТТН%' THEN 'Помилка ТТН'"
+			. " WHEN s.status_text IS NULL OR s.status_text = '' THEN 'Чернетка'"
+			. " ELSE s.status_text END";
+
+		$where = [];
+		if ($filterQ !== '') {
+			$like = "'%" . $this->db->escape(addcslashes($filterQ, '%_')) . "%'";
+			$or   = [
+				"s.int_doc_number LIKE " . $like,
+				"s.return_int_doc_number LIKE " . $like,
+				"CONCAT_WS(' ', o.firstname, o.lastname) LIKE " . $like,
+				"CONCAT_WS(' ', o.shipping_firstname, o.shipping_lastname) LIKE " . $like,
+				"o.telephone LIKE " . $like,
+				"s.recipient_phone LIKE " . $like,
+			];
+			$digits = ltrim($filterQ, '#');
+			if (ctype_digit($digits)) {
+				$or[] = "s.order_id = " . (int)$digits;
+			}
+			$where[] = '(' . implode(' OR ', $or) . ')';
+		}
+		if ($filterStatus !== '') {
+			$where[] = "(" . $label . ") = '" . $this->db->escape($filterStatus) . "'";
+		}
+		$sqlWhere = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+		$from     = " FROM `" . DB_PREFIX . "np_shipment` s LEFT JOIN `" . DB_PREFIX . "order` o ON o.order_id = s.order_id";
+
+		$total = (int)$this->db->query("SELECT COUNT(*) AS cnt" . $from . $sqlWhere)->row['cnt'];
+		$rows  = $this->db->query("SELECT s.*, (" . $label . ") AS status_label, o.firstname, o.lastname, o.telephone, o.shipping_firstname, o.shipping_lastname, o.shipping_city, o.shipping_address_1"
+			. $from . $sqlWhere . " ORDER BY s.shipment_id DESC LIMIT " . (($page - 1) * $limit) . ", " . $limit)->rows;
+
+		$data['statuses'] = array_column($this->db->query("SELECT DISTINCT (" . $label . ") AS status_label" . $from . " ORDER BY status_label")->rows, 'status_label');
 
 		$data['shipments'] = array_map(function ($r) use ($ut) {
+			// Recipient = the person who collects the parcel: the order's delivery
+			// name (falls back to the buyer) and phone. The branch is shown apart.
+			$name = trim((string)($r['shipping_firstname'] ?? '') . ' ' . (string)($r['shipping_lastname'] ?? ''));
+			if ($name === '' || $name === '-') {
+				$name = trim((string)($r['firstname'] ?? '') . ' ' . (string)($r['lastname'] ?? ''));
+			}
+			$phone = trim((string)($r['recipient_phone'] ?? '')) ?: trim((string)($r['telephone'] ?? ''));
+			// recipient_name holds «city / branch» picked at checkout.
+			$dest = trim((string)($r['recipient_name'] ?? ''), " /");
+			if ($dest === '') {
+				$dest = trim((string)($r['shipping_city'] ?? '') . ', ' . (string)($r['shipping_address_1'] ?? ''), ' ,');
+			}
+			$code = (int)$r['status_code'];
+			$label = (string)$r['status_label'];
+			$detail = (string)($r['status_text'] ?? '');
 			return [
 				'shipment_id'    => $r['shipment_id'],
 				'order_id'       => $r['order_id'],
 				'order_url'      => $this->url->link('sale/order.info', 'user_token=' . $ut . '&order_id=' . (int)$r['order_id']),
 				'int_doc_number' => $r['int_doc_number'] ?? '',
 				'tracking_url'   => $r['int_doc_number'] ? ('https://novaposhta.ua/tracking/?cargo_number=' . urlencode((string)$r['int_doc_number'])) : '',
-				'recipient'      => $r['recipient_name'] ?? '',
-				'status_code'    => (int)$r['status_code'],
-				'status_text'    => $r['status_text'] ?? '',
+				'recipient'      => $name,
+				'phone'          => $phone,
+				'destination'    => str_replace(' / ', ', ', $dest),
+				'status_code'    => $code,
+				'status_label'   => $label,
+				// «Помилка ТТН: <why>» / «У черзі на ТТН: <why>» — the badge already says the first part.
+				'status_detail'  => $detail !== $label ? trim(preg_replace('/^(Помилка ТТН|У черзі на ТТН)\s*:\s*/u', '', $detail)) : '',
+				'status_class'   => $label === 'Помилка ТТН' ? 'bg-danger' : ($code === 9 ? 'bg-success' : ($code > 0 ? 'bg-info' : ($code < 0 ? 'bg-warning text-dark' : 'bg-secondary'))),
 				'cod_amount'     => (float)($r['cod_amount'] ?? 0),
 				'money_transfer' => (string)($r['money_transfer_number'] ?? ''),
 				'return_ttn'     => (string)($r['return_int_doc_number'] ?? ''),
 				'created_at'     => $r['created_at'] ?? '',
 				'last_polled_at' => $r['last_polled_at'] ?? '',
+				'can_return'     => !empty($r['int_doc_number']) && empty($r['return_int_doc_number']),
 				'return_url'     => $this->url->link('extension/nova_poshta_premium/shipment.createReturn', 'user_token=' . $ut . '&shipment_id=' . (int)$r['shipment_id']),
 			];
 		}, $rows);
+		$data['has_actions'] = (bool)array_filter(array_column($data['shipments'], 'can_return'));
+
+		$data['filter_q']      = $filterQ;
+		$data['filter_status'] = $filterStatus;
+		$data['action']        = $this->url->link('extension/nova_poshta_premium/shipment.list', 'user_token=' . $ut);
+		$data['user_token']    = $ut;
+		$query = '';
+		if ($filterQ !== '') {
+			$query .= '&filter_q=' . urlencode($filterQ);
+		}
+		if ($filterStatus !== '') {
+			$query .= '&filter_status=' . urlencode($filterStatus);
+		}
+		$data['reset_url']  = $data['action'];
+		$data['pagination'] = $this->load->controller('common/pagination', [
+			'total' => $total,
+			'page'  => $page,
+			'limit' => $limit,
+			'url'   => $this->url->link('extension/nova_poshta_premium/shipment.list', 'user_token=' . $ut . $query . '&page={page}'),
+		]);
+		$data['results'] = $total ? sprintf($this->language->get('text_results'), ($page - 1) * $limit + 1, min($total, $page * $limit), $total) : '';
 
 		$data['breadcrumbs'] = [
 			['text' => $this->language->get('text_home'), 'href' => $this->url->link('common/dashboard', 'user_token=' . $ut)],

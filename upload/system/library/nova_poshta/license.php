@@ -31,7 +31,7 @@ class License {
 	/** Trial endpoint; override via CATCODE_TRIAL_API. */
 	private const DEFAULT_TRIAL_ENDPOINT = 'https://catcode.com.ua/wp-json/catcode/v1/trial';
 
-	/** Free trial length in days. Paid licences are annual (1–5 years). */
+	/** Free trial length in days. Paid licences for OpenCart are perpetual. */
 	public const TRIAL_DAYS = 7;
 
 	/** Canonical module slug — MUST match post_name of the module CPT. */
@@ -208,7 +208,7 @@ class License {
 		if ($checkedAt !== '') {
 			return 'недійсна (остання перевірка ' . $checkedAt . ')';
 		}
-		return $status;
+		return $status === 'invalid' ? 'недійсна' : $status;
 	}
 
 	/**

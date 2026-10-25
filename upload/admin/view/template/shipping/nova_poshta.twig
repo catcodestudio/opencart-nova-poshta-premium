@@ -29,6 +29,12 @@
       <div>{{ np_api_down }}</div>
     </div>
     {% endif %}
+    {% if np_phone_hint %}
+    <div class="alert alert-warning d-flex align-items-start gap-3" id="np-phone-hint">
+      <i class="fa-solid fa-phone mt-1"></i>
+      <div>{{ np_phone_hint }}</div>
+    </div>
+    {% endif %}
     {% if np_ttn_queued %}
     <div class="alert alert-info d-flex align-items-start gap-3" id="np-ttn-queued">
       <i class="fa-solid fa-clock-rotate-left mt-1"></i>
@@ -245,7 +251,8 @@
                 {% else %}
                   <span class="badge bg-secondary">{{ text_license_free }}</span>
                   {% if has_license %}
-                    <span class="text-danger small">{{ license_verdict == 'invalid' ? text_license_invalid : text_license_unchecked }}</span>
+                    <span class="{{ license_verdict == 'invalid' ? 'text-danger' : 'text-muted' }} small">{{ text_license_key_label|format(license_key_masked) }} — {{ license_verdict == 'invalid' ? text_license_invalid : text_license_unchecked }}</span>
+                    <button type="button" id="button-license-off" data-url="{{ url_license_deactivate }}" class="btn btn-outline-secondary btn-sm">{{ button_license_remove }}</button>
                   {% endif %}
                   <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modal-np-pro">{{ button_try_pro }}</button>
                 {% endif %}

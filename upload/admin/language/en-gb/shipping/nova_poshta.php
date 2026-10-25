@@ -75,10 +75,10 @@ $_['text_pro_badge']          = 'Pro';
 $_['text_license_free']       = 'Free version';
 $_['text_license_valid']      = 'Pro is active';
 $_['text_license_trial']      = 'Trial: %s day(s) left';
-$_['text_license_invalid']    = 'The key was rejected by the server';
-$_['text_license_unchecked']  = 'The key has not been checked yet';
+$_['text_license_invalid']    = 'rejected by the server';
+$_['text_license_unchecked']  = 'not checked yet';
 $_['text_license_expires']    = 'valid until %s';
-$_['text_license_help']       = 'Annual licence (1–5 years) from your CatCode account. Without it waybills are still created, but cash-on-delivery on the waybill, return waybills, COD payout reconciliation, automatic status updates and webhooks stay off.';
+$_['text_license_help']       = 'Perpetual licence from your CatCode account (one-time purchase). Without it waybills are still created, but cash-on-delivery on the waybill, return waybills, COD payout reconciliation, automatic status updates and webhooks stay off.';
 $_['text_trial_started']      = 'The trial has started. The key has also been e-mailed to you.';
 $_['text_modal_title']        = 'Nova Poshta Premium Pro';
 $_['text_modal_tab_trial']    = 'Try 7 days free';
@@ -102,3 +102,6 @@ $_['text_license_err_no_curl']          = 'PHP has no cURL, so the licence canno
 // API outage
 $_['text_api_down'] = 'The Nova Poshta API has not been responding since %s (%s). The shop keeps working: cities and branches come from the saved directory, the price is the last known tariff or the cost from these settings, and waybills are queued and created automatically once the API is back. Next check at %s; «Test connection» checks right away.';
 $_['text_ttn_queued'] = 'Waybills in the queue: %s — the Nova Poshta API did not answer when they were due. They will be created automatically (hourly cron or opening the Shipments page).';
+$_['text_license_key_label']  = 'Key %s';
+$_['button_license_remove']   = 'Remove key';
+$_['text_phone_hint']         = 'A waybill needs the recipient\'s phone, but the Telephone field is hidden or optional at checkout in this store. Turn on «Telephone Display» and «Telephone Required» in <a href="%s">store Settings → Option</a>.';
