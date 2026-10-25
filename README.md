@@ -2,7 +2,7 @@
 
 Nova Poshta shipping integration for OpenCart 4.x merchants. Free download with optional Pro license that unlocks premium automation.
 
-**Status:** v1.2.1 — production. Real license server (CatCode), `product_slug` enforcement, all premium features properly gated. Checkout block appearance is themeable (accent colour, corner radius, light/dark/auto) and renders cleanly on the stock OpenCart `basic` theme.
+**Status:** v1.2.29 — production. Real license server (CatCode), `product_slug` enforcement, all premium features properly gated. Checkout block appearance is themeable (accent colour, corner radius, light/dark/auto) and renders cleanly on the stock OpenCart `basic` theme.
 
 ## Free features (no license required)
 
@@ -14,7 +14,7 @@ Nova Poshta shipping integration for OpenCart 4.x merchants. Free download with 
 - **Storefront checkout picker** injected on `</body>` — customer chooses NP city + warehouse without leaving the checkout
 - Per-cart `getQuote()` calls NP API with cart weight + value
 - Auto-shipment recording on order create (event `addOrder/after`)
-- Shipments dashboard in admin (last 200 with status badges)
+- Shipments dashboard in admin: 25 per page, search by order number, waybill, name or phone, status filter
 - Automatic TTN creation on order status reaching the configured trigger
 - City + warehouse cache with weekly background sync cron
 - **Themeable checkout block** — accent colour, corner radius (0–28px) and Light / Dark / Auto theme configurable in admin (Appearance section); `Auto` inherits the storefront's Bootstrap variables
