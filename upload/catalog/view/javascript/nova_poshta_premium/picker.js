@@ -472,8 +472,33 @@
   // Focus on the field shows the whole branch list of the city with the picked
   // branch highlighted; the list narrows only once the customer types.
   let whFiltering = false;
+  // Big cities have thousands of branches and parcel lockers (Kyiv: 8 000+).
+  // The menu is drawn in pages of 100 around the chosen branch and grows as the
+  // customer scrolls either way, so opening it stays instant on a phone.
+  const WH_PAGE = 100;
+  let whView = null;
+  const whRows = (a, b) => whView.list.slice(a, b).map((w) =>
+    `<div class="np-opt${w.ref === whView.cur ? ' is-active is-current' : ''}" role="option"${w.ref === whView.cur ? ' aria-selected="true"' : ''} data-ref="${w.ref}" data-name="${w.description.replace(/"/g, '&quot;')}">${w.description}</div>`
+  ).join('');
+  const whMore = () => {
+    const menu = whMenu();
+    if (!whView || !menu.classList.contains('is-open')) return;
+    if (whView.end < whView.list.length && menu.scrollTop + menu.clientHeight > menu.scrollHeight - 160) {
+      const b = Math.min(whView.list.length, whView.end + WH_PAGE);
+      menu.insertAdjacentHTML('beforeend', whRows(whView.end, b));
+      whView.end = b;
+    }
+    if (whView.start > 0 && menu.scrollTop < 160) {
+      const a = Math.max(0, whView.start - WH_PAGE);
+      const h = menu.scrollHeight;
+      menu.insertAdjacentHTML('afterbegin', whRows(a, whView.start));
+      whView.start = a;
+      menu.scrollTop += menu.scrollHeight - h;
+    }
+  };
   const renderWh = (filter) => {
     const menu = whMenu();
+    whView = null;
     const f = (filter || '').trim();
     const fl = f.toLowerCase();
     const list = fl ? warehouses.filter((w) => w.description.toLowerCase().includes(fl)) : warehouses;
@@ -487,12 +512,13 @@
       return;
     }
     if (!list.length) { menu.innerHTML = muted(t.noWh); openMenu(menu); return; }
-    menu.innerHTML = (fl ? list.slice(0, 60) : list).map((w) =>
-      `<div class="np-opt${w.ref === cur ? ' is-active is-current' : ''}" role="option"${w.ref === cur ? ' aria-selected="true"' : ''} data-ref="${w.ref}" data-name="${w.description.replace(/"/g, '&quot;')}">${w.description}</div>`
-    ).join('');
+    const at = cur ? list.findIndex((w) => w.ref === cur) : -1;
+    whView = { list, cur, start: at > 30 ? at - 30 : 0, end: 0 };
+    whView.end = Math.min(list.length, whView.start + WH_PAGE);
+    menu.innerHTML = whRows(whView.start, whView.end);
     openMenu(menu);
     const on = menu.querySelector('.np-opt.is-current');
-    if (on) menu.scrollTop = Math.max(0, on.offsetTop - (menu.clientHeight - on.offsetHeight) / 2);
+    menu.scrollTop = on ? Math.max(0, on.offsetTop - (menu.clientHeight - on.offsetHeight) / 2) : 0;
   };
 
   // setSelection requests in flight. While one is pending the session does not
@@ -657,6 +683,7 @@
       if (whHidden().value && wi.value) { try { wi.select(); } catch (e) { /* not selectable */ } }
     };
     wi.addEventListener('focus', openAllWh);
+    wm.addEventListener('scroll', whMore, { passive: true });
     // Still focused after a keyboard pick: a click reopens the full list too.
     wi.addEventListener('click', () => { if (!wm.classList.contains('is-open')) openAllWh(); });
     wi.addEventListener('input', () => { whFiltering = true; renderWh(wi.value); });
