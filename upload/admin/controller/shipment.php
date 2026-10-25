@@ -46,33 +46,32 @@ class Shipment extends \Opencart\System\Engine\Controller {
 			. " WHEN s.status_text IS NULL OR s.status_text = '' THEN 'Чернетка'"
 			. " ELSE s.status_text END";
 
-		$where = [];
-		if ($filterQ !== '') {
-			// Wildcards go inside escape(): on the OpenCart 4 pdo driver escape() returns a placeholder.
-			$like = "'" . $this->db->escape('%' . addcslashes($filterQ, '%_') . '%') . "'";
-			$or   = [
-				"s.int_doc_number LIKE " . $like,
-				"s.return_int_doc_number LIKE " . $like,
-				"CONCAT_WS(' ', o.firstname, o.lastname) LIKE " . $like,
-				"CONCAT_WS(' ', o.shipping_firstname, o.shipping_lastname) LIKE " . $like,
-				"o.telephone LIKE " . $like,
-				"s.recipient_phone LIKE " . $like,
-			];
-			$digits = ltrim($filterQ, '#');
-			if (ctype_digit($digits)) {
-				$or[] = "s.order_id = " . (int)$digits;
+		// Built once per query: on the OpenCart 4 pdo driver every escape() is a
+		// placeholder bound to the NEXT query only and must not repeat inside it.
+		$where = function () use ($filterQ, $filterStatus, $label) {
+			$w = array();
+			if ($filterQ !== '') {
+				$or = array();
+				foreach (array('s.int_doc_number', 's.return_int_doc_number', "CONCAT_WS(' ', o.firstname, o.lastname)", "CONCAT_WS(' ', o.shipping_firstname, o.shipping_lastname)", 'o.telephone', 's.recipient_phone') as $col) {
+					// Wildcards go inside escape().
+					$or[] = $col . " LIKE '" . $this->db->escape('%' . addcslashes($filterQ, '%_') . '%') . "'";
+				}
+				$digits = ltrim($filterQ, '#');
+				if ($digits !== '' && ctype_digit($digits)) {
+					$or[] = "s.order_id = " . (int)$digits;
+				}
+				$w[] = '(' . implode(' OR ', $or) . ')';
 			}
-			$where[] = '(' . implode(' OR ', $or) . ')';
-		}
-		if ($filterStatus !== '') {
-			$where[] = "(" . $label . ") = '" . $this->db->escape($filterStatus) . "'";
-		}
-		$sqlWhere = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+			if ($filterStatus !== '') {
+				$w[] = "(" . $label . ") = '" . $this->db->escape($filterStatus) . "'";
+			}
+			return $w ? ' WHERE ' . implode(' AND ', $w) : '';
+		};
 		$from     = " FROM `" . DB_PREFIX . "np_shipment` s LEFT JOIN `" . DB_PREFIX . "order` o ON o.order_id = s.order_id";
 
-		$total = (int)$this->db->query("SELECT COUNT(*) AS cnt" . $from . $sqlWhere)->row['cnt'];
+		$total = (int)$this->db->query("SELECT COUNT(*) AS cnt" . $from . $where())->row['cnt'];
 		$rows  = $this->db->query("SELECT s.*, (" . $label . ") AS status_label, o.firstname, o.lastname, o.telephone, o.shipping_firstname, o.shipping_lastname, o.shipping_city, o.shipping_address_1"
-			. $from . $sqlWhere . " ORDER BY s.shipment_id DESC LIMIT " . (($page - 1) * $limit) . ", " . $limit)->rows;
+			. $from . $where() . " ORDER BY s.shipment_id DESC LIMIT " . (($page - 1) * $limit) . ", " . $limit)->rows;
 
 		$data['statuses'] = array_column($this->db->query("SELECT DISTINCT (" . $label . ") AS status_label" . $from . " ORDER BY status_label")->rows, 'status_label');
 
