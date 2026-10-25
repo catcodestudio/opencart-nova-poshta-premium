@@ -48,7 +48,8 @@ class Shipment extends \Opencart\System\Engine\Controller {
 
 		$where = [];
 		if ($filterQ !== '') {
-			$like = "'%" . $this->db->escape(addcslashes($filterQ, '%_')) . "%'";
+			// Wildcards go inside escape(): on the OpenCart 4 pdo driver escape() returns a placeholder.
+			$like = "'" . $this->db->escape('%' . addcslashes($filterQ, '%_') . '%') . "'";
 			$or   = [
 				"s.int_doc_number LIKE " . $like,
 				"s.return_int_doc_number LIKE " . $like,
