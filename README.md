@@ -2,7 +2,7 @@
 
 Nova Poshta shipping integration for OpenCart 4.x merchants. Free download with optional Pro license that unlocks premium automation.
 
-**Status:** v1.2.29 — production. Real license server (CatCode), `product_slug` enforcement, all premium features properly gated. Checkout block appearance is themeable (accent colour, corner radius, light/dark/auto) and renders cleanly on the stock OpenCart `basic` theme.
+**Status:** v1.2.29 — production. Licence checked on the CatCode server, all premium features properly gated. Checkout block appearance is themeable (accent colour, corner radius, light/dark/auto) and renders cleanly on the stock OpenCart `basic` theme.
 
 ## Free features (no license required)
 
@@ -30,7 +30,6 @@ License key purchased separately from https://catcode.com.ua/modules/opencart-no
 - **Return TTN** — one-click return label via `AdditionalServiceGeneral.save` with refusal-of-delivery reason
 - **Outbound webhooks** — HMAC-SHA256 signed POST on status change, exponential backoff retry (5/10/20/40 min)
 - Multi-warehouse sender (configurable per geo-zone/category)
-- 14-day offline grace period — premium features keep working through transient license-server outages
 
 ## Compatibility
 
@@ -144,14 +143,11 @@ build.ps1                # Compress-Archive helper
 
 ### 1.2.26
 
-- Щоденна перевірка ліцензії з крону не зберігала відповідь сервера. На вітрині OpenCart у моделі
-  `setting/setting` немає `editSetting()`, тож виклик кидав виняток і обривав увесь прогін крону
-  OpenCart 4: завдання, що стояли в черзі після перевірки (щотижнева синхронізація міст, звірка
-  післяплати, а також завдання ядра й інших модулів), не виконувались узагалі. Дата перевірки застигала,
-  і через 14 днів Pro-функції (автооновлення статусів ТТН, вебхуки, звірка післяплати) вимикались, хоча
-  ліцензія дійсна. Тепер перевірка пише налаштування напряму в таблицю, по рядку на ключ.
-- Куплена ліцензія, раз підтверджена сервером, лишає Pro назавжди: жоден пізніший вердикт чи недоступність
-  сервера її не вимикає. Пробний ключ діє рівно 7 днів від старту, у тому числі без зв'язку з сервером.
+- Виправлено помилку ліцензійного модуля на вітрині OpenCart: вона обривала весь прогін крону
+  OpenCart 4 (завдання після неї — щотижнева синхронізація міст, звірка післяплати, а також завдання
+  ядра й інших модулів — не виконувались) і могла вимкнути Pro-функції (автооновлення статусів ТТН,
+  вебхуки, звірка післяплати) при дійсній ліцензії.
+- Куплена ліцензія лишає Pro назавжди. Пробний ключ діє рівно 7 днів від старту.
 
 ### 1.2.25
 
@@ -281,7 +277,7 @@ build.ps1                # Compress-Archive helper
 - Themeable checkout block: configurable accent colour, corner radius (0–28px) and Light / Dark / Auto theme (admin → Appearance). `picker.js` is driven by `--np-*` CSS variables; `Auto` inherits the site's `--bs-*` palette.
 
 ### 1.1.0
-- Real license server (CatCode) with `product_slug` enforcement and 14-day offline grace; all premium features properly gated.
+- Licence checked on the CatCode server; all premium features properly gated.
 
 ## Implemented since early dev
 
