@@ -14,6 +14,8 @@ require_once __DIR__ . '/guard.php';
  */
 class Cache {
 	private const WAREHOUSE_TTL_DAYS = 7;
+	/** Rows from which np_cities counts as fully synced. */
+	const FULL_DIRECTORY = 3000;
 	// Seconds per call for the directory downloads (a Kyiv page is ~500 rows).
 	private const DIRECTORY_TIMEOUT = 8;
 
@@ -48,14 +50,18 @@ class Cache {
 		$any    = $db->escape('%' . $lower . '%');
 		$exact  = $db->escape($lower);
 		$rows = $db->query("SELECT ref, description, area_description FROM `" . DB_PREFIX . "np_cities` WHERE LOWER(description) LIKE '" . $prefix . "' OR LOWER(description) LIKE '" . $any . "' ORDER BY (LOWER(description) = '" . $exact . "') DESC, CHAR_LENGTH(description) ASC LIMIT 20")->rows;
-		if ($rows) {
-			return array_map(fn($r) => ['ref' => (string)$r['ref'], 'name' => (string)$r['description'], 'area' => (string)$r['area_description']], $rows);
+		$cached = array_map(fn($r) => ['ref' => (string)$r['ref'], 'name' => (string)$r['description'], 'area' => (string)$r['area_description']], $rows);
+		// A sparse directory (no full sync yet) can match only «Крива (Київська обл.)»
+		// for «Київ» — the city itself is then never offered, so such a hit is not an answer.
+		foreach ($cached as $c) {
+			if (self::lower($c['name']) === $lower) return $cached;
 		}
+		if ($cached && (int)$db->query("SELECT COUNT(*) AS cnt FROM `" . DB_PREFIX . "np_cities`")->row['cnt'] >= self::FULL_DIRECTORY) return $cached;
 		// Miss: live fetch and store this batch (not full sync — incremental warmup).
-		if ($apiKey === '') return [];
+		if ($apiKey === '') return $cached;
 		$client = new Client($apiKey, $db);
 		$resp = $client->call('Address', 'getCities', ['FindByString' => $query, 'Limit' => '20']);
-		if (empty($resp['success']) || !is_array($resp['data'] ?? null)) return [];
+		if (empty($resp['success']) || !is_array($resp['data'] ?? null)) return $cached;
 		$out = [];
 		foreach ($resp['data'] as $row) {
 			$ref  = (string)($row['Ref'] ?? '');
@@ -64,6 +70,10 @@ class Cache {
 			if ($ref === '') continue;
 			$db->query("INSERT INTO `" . DB_PREFIX . "np_cities` SET ref = '" . $db->escape($ref) . "', description = '" . $db->escape($desc) . "', area_description = '" . $db->escape($area) . "', updated_at = NOW() ON DUPLICATE KEY UPDATE description = VALUES(description), area_description = VALUES(area_description), updated_at = VALUES(updated_at)");
 			$out[] = ['ref' => $ref, 'name' => $desc, 'area' => $area];
+		}
+		$seen = array_column($out, 'ref');
+		foreach ($cached as $c) {
+			if (!in_array($c['ref'], $seen, true)) $out[] = $c;
 		}
 		return $out;
 	}
