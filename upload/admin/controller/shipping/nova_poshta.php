@@ -280,6 +280,8 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		];
 
 		$data['save']           = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.save', 'user_token=' . $ut);
+		$data['url_cities_page'] = str_replace('&amp;', '&', $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.citiesPage', 'user_token=' . $ut));
+		$data['np_cities_sparse'] = $this->apiKey() !== '' && !\Opencart\System\Library\NovaPoshta\Cache::citiesComplete($this->db);
 		$data['test']           = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.test', 'user_token=' . $ut);
 		$data['search_cities']  = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.searchCities', 'user_token=' . $ut);
 		$data['get_warehouses'] = $this->url->link('extension/nova_poshta_premium/shipping/nova_poshta.getWarehouses', 'user_token=' . $ut);
@@ -410,6 +412,18 @@ class NovaPoshta extends \Opencart\System\Engine\Controller {
 		}
 
 		$this->jsonResponse($json);
+	}
+
+	/** One page of the city directory for the loader on the settings page. */
+	public function citiesPage(): void {
+		$this->load->language('extension/nova_poshta_premium/shipping/nova_poshta');
+		$out = ['ok' => false];
+		if ($this->user->hasPermission('modify', 'extension/nova_poshta_premium/shipping/nova_poshta')) {
+			$page = max(1, (int)($this->request->post['page'] ?? 1));
+			$out = \Opencart\System\Library\NovaPoshta\Cache::syncCitiesPage($this->db, $this->apiKey(), $page);
+		}
+		$this->response->addHeader('Content-Type: application/json');
+		$this->response->setOutput(json_encode($out));
 	}
 
 	public function test(): void {

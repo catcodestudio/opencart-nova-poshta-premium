@@ -14,8 +14,6 @@ require_once __DIR__ . '/guard.php';
  */
 class Cache {
 	private const WAREHOUSE_TTL_DAYS = 7;
-	/** Rows from which np_cities counts as fully synced. */
-	const FULL_DIRECTORY = 3000;
 	// Seconds per call for the directory downloads (a Kyiv page is ~500 rows).
 	private const DIRECTORY_TIMEOUT = 8;
 
@@ -56,7 +54,7 @@ class Cache {
 		foreach ($cached as $c) {
 			if (self::lower($c['name']) === $lower) return $cached;
 		}
-		if ($cached && (int)$db->query("SELECT COUNT(*) AS cnt FROM `" . DB_PREFIX . "np_cities`")->row['cnt'] >= self::FULL_DIRECTORY) return $cached;
+		if ($cached && self::citiesComplete($db)) return $cached;
 		// Miss: live fetch and store this batch (not full sync — incremental warmup).
 		if ($apiKey === '') return $cached;
 		$client = new Client($apiKey, $db);
@@ -256,6 +254,41 @@ class Cache {
 		return ($row && (float)$row['cost'] > 0) ? (float)$row['cost'] : null;
 	}
 
+	/** A full pass over Nova Poshta's cities finished: only then a partial hit needs no live lookup. */
+	public static function citiesComplete($db): bool {
+		$r = $db->query("SELECT value FROM `" . DB_PREFIX . "setting` WHERE store_id = '0' AND `code` = 'np_directory' AND `key` = 'np_directory_cities_full'");
+		return !empty($r->row['value']);
+	}
+
+	private static function markCitiesComplete($db) {
+		$db->query("DELETE FROM `" . DB_PREFIX . "setting` WHERE store_id = '0' AND `code` = 'np_directory' AND `key` = 'np_directory_cities_full'");
+		$db->query("INSERT INTO `" . DB_PREFIX . "setting` SET store_id = '0', `code` = 'np_directory', `key` = 'np_directory_cities_full', `value` = '" . $db->escape(date('Y-m-d')) . "', serialized = '0'");
+	}
+
+	public static function cityCount($db): int {
+		return (int)$db->query("SELECT COUNT(*) AS cnt FROM `" . DB_PREFIX . "np_cities`")->row['cnt'];
+	}
+
+	/** One page of the full directory, for the loader on the settings page. */
+	public static function syncCitiesPage($db, string $apiKey, int $page): array {
+		if ($apiKey === '') return ['ok' => false, 'done' => false, 'count' => self::cityCount($db)];
+		$client = new Client($apiKey, $db, 15);
+		$resp = $client->call('Address', 'getCities', ['Limit' => '150', 'Page' => (string)$page]);
+		if (empty($resp['success']) || !is_array($resp['data'] ?? null)) {
+			return ['ok' => false, 'done' => false, 'count' => self::cityCount($db)];
+		}
+		foreach ($resp['data'] as $row) {
+			$ref  = (string)($row['Ref'] ?? '');
+			$desc = (string)($row['Description'] ?? '');
+			$area = (string)($row['AreaDescription'] ?? '');
+			if ($ref === '') continue;
+			$db->query("INSERT INTO `" . DB_PREFIX . "np_cities` SET ref = '" . $db->escape($ref) . "', description = '" . $db->escape($desc) . "', area_description = '" . $db->escape($area) . "', updated_at = NOW() ON DUPLICATE KEY UPDATE description = VALUES(description), area_description = VALUES(area_description), updated_at = VALUES(updated_at)");
+		}
+		$done = count($resp['data']) < 150;
+		if ($done) self::markCitiesComplete($db);
+		return ['ok' => true, 'done' => $done, 'count' => self::cityCount($db)];
+	}
+
 	public static function syncCities($db, string $apiKey): array {
 		if ($apiKey === '') return ['ok' => false, 'inserted' => 0];
 		$client = new Client($apiKey, $db, 15);
@@ -274,7 +307,10 @@ class Cache {
 				$db->query("INSERT INTO `" . DB_PREFIX . "np_cities` SET ref = '" . $db->escape($ref) . "', description = '" . $db->escape($desc) . "', area_description = '" . $db->escape($area) . "', updated_at = NOW() ON DUPLICATE KEY UPDATE description = VALUES(description), area_description = VALUES(area_description), updated_at = VALUES(updated_at)");
 				$inserted++;
 			}
-			if (count($resp['data']) < 150) break;
+			if (count($resp['data']) < 150) {
+				self::markCitiesComplete($db);
+				break;
+			}
 			$page++;
 		}
 		return ['ok' => true, 'inserted' => $inserted];

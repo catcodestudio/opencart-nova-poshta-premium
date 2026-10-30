@@ -2,7 +2,7 @@
 
 Nova Poshta shipping integration for OpenCart 4.x merchants. Free download with optional Pro license that unlocks premium automation.
 
-**Status:** v1.2.30 — production. Licence checked on the CatCode server, all premium features properly gated. Checkout block appearance is themeable (accent colour, corner radius, light/dark/auto) and renders cleanly on the stock OpenCart `basic` theme.
+**Status:** v1.2.31 — production. Licence checked on the CatCode server, all premium features properly gated. Checkout block appearance is themeable (accent colour, corner radius, light/dark/auto) and renders cleanly on the stock OpenCart `basic` theme.
 
 ## Free features (no license required)
 
@@ -80,6 +80,10 @@ build.ps1                # Compress-Archive helper
 
 ## Changelog
 
+
+### 1.2.31
+
+- City directory: the settings page now loads the full Nova Poshta city list by itself, with progress, and says so when Nova Poshta did not answer; no cron is needed for it.
 
 ### 1.2.30
 

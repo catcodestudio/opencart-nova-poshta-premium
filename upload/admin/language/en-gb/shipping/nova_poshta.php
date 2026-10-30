@@ -105,3 +105,6 @@ $_['text_ttn_queued'] = 'Waybills in the queue: %s — the Nova Poshta API did n
 $_['text_license_key_label']  = 'Key %s';
 $_['button_license_remove']   = 'Remove key';
 $_['text_phone_hint']         = 'A waybill needs the recipient\'s phone, but the Telephone field is hidden or optional at checkout in this store. Turn on «Telephone Display» and «Telephone Required» in <a href="%s">store Settings → Option</a>.';
+$_['text_cities_loading'] = 'Loading the Nova Poshta city directory, keep this page open. Cities loaded:';
+$_['text_cities_done'] = 'The city directory is loaded.';
+$_['text_cities_failed'] = 'The city directory is not fully loaded: Nova Poshta did not answer. Buyers still see cities while its API works. Loading continues when you open this page again.';

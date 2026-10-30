@@ -15,6 +15,9 @@
     </div>
   </div>
   <div class="container-fluid">
+    {% if np_cities_sparse %}
+    <div class="alert alert-info" id="np-cities"><i class="fa-solid fa-rotate fa-spin"></i> <span>{{ text_cities_loading }}</span></div>
+    {% endif %}
     {% if show_notice %}
     <div class="alert alert-info alert-dismissible d-flex align-items-center gap-3" id="np-notice">
       <i class="fa-solid fa-circle-info"></i>
@@ -542,6 +545,30 @@
       post(noticeClose.dataset.url).catch(() => {});
     });
   }
+})();
+</script>
+<script type="text/javascript">
+(function () {
+  var box = document.getElementById('np-cities');
+  if (!box) return;
+  var text = box.querySelector('span'), icon = box.querySelector('i'), key = 'np_cities_page';
+  var page = parseInt(localStorage.getItem(key) || '1', 10) || 1;
+  var finish = function (cls, msg) { box.className = 'alert ' + cls; icon.className = 'fa-solid fa-circle-info'; text.textContent = msg; };
+  var giveUp = function () { finish('alert-warning', '{{ text_cities_failed|e('js') }}'); };
+  var retries = 0;
+  var fail = function () { if (retries >= 5) { giveUp(); return; } retries++; setTimeout(step, 3000 * retries); };
+  function step() {
+    $.ajax({ url: '{{ url_cities_page|raw }}', type: 'post', dataType: 'json', data: { page: page } }).done(function (r) {
+      if (!r || !r.ok) { fail(); return; }
+      text.textContent = '{{ text_cities_loading|e('js') }}' + ' ' + r.count;
+      retries = 0;
+      if (r.done) { localStorage.removeItem(key); finish('alert-success', '{{ text_cities_done|e('js') }}'); return; }
+      page++;
+      localStorage.setItem(key, String(page));
+      setTimeout(step, 700);
+    }).fail(fail);
+  }
+  step();
 })();
 </script>
 {{ footer }}
